@@ -47,6 +47,9 @@ class PageContentAnalyzer(BaseAnalyzer):
         extra_findings: list[Finding] = []
         html_text = ""
         use_browser = False
+        # Captured for downstream threat classification (see iris.classification).
+        self.page_text: str = ""
+        self.scripts: list[str] = []
 
         try:
             response = requests.get(
@@ -110,6 +113,19 @@ class PageContentAnalyzer(BaseAnalyzer):
         soup = BeautifulSoup(html_text, "html.parser")
         parsed = urlparse(url)
         hostname = parsed.hostname or ""
+
+        # Capture visible text + scripts so the classifier can spot techniques
+        # (ClickFix, encoded commands, pastejacking, drainers, captcha gating).
+        self.page_text = soup.get_text(" ", strip=True)[:200000]
+        scripts: list[str] = []
+        for tag in soup.find_all("script"):
+            src = tag.get("src")
+            if src:
+                scripts.append(src)
+            body = tag.string or tag.get_text()
+            if body and body.strip():
+                scripts.append(body[:50000])
+        self.scripts = scripts
 
         findings: list[Finding] = list(extra_findings)
 

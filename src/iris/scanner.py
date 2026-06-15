@@ -14,6 +14,7 @@ from playwright.sync_api import Browser, Playwright, sync_playwright
 
 from iris.analyzers import ALL_ANALYZERS
 from iris.browser import launch_browser, reset_solved_state, set_interactive_mode
+from iris.classification import classify
 from iris.dns_util import compute_host_resolver_rule
 from iris.models import (
     AnalyzerResult,
@@ -381,12 +382,27 @@ def scan_url(
 
     recommendation = _build_recommendation(risk_category)
 
+    # Classify attack techniques (ClickFix, encoded command, phishing, ...).
+    # Orthogonal to the risk verdict — a URL may carry several, or none.
+    classifications = classify(
+        url=url,
+        page_text=scan_meta.get("page_text", ""),
+        scripts=scan_meta.get("scripts", []),
+        findings=[f for r in analyzer_results for f in r.findings],
+        file_download=scan_meta.get("file_download"),
+        redirect_chain=scan_meta.get("redirect_chain", []),
+    )
+
     # Emit final score event
     _emit(on_event, "score", {
         "overall_score": overall_score,
         "confidence": confidence,
         "risk_category": risk_category.value,
         "recommendation": recommendation,
+    })
+
+    _emit(on_event, "classifications", {
+        "classifications": [asdict(c) for c in classifications],
     })
 
     return ScanReport(
@@ -403,6 +419,7 @@ def scan_url(
         discovered_links=scan_meta["discovered_links"],
         file_download=scan_meta["file_download"],
         multi_screenshots=multi_screenshots,
+        threat_classifications=classifications,
     )
 
 
@@ -478,6 +495,8 @@ def _run_all_analyzers(
         "discovered_links": [],
         "file_download": None,
         "screenshot_path": "",
+        "page_text": "",
+        "scripts": [],
     }
 
     # Submit thread-safe analyzers to the pool
@@ -573,6 +592,10 @@ def _extract_metadata(
 
     if analyzer.name == "Download Analysis":
         meta["file_download"] = getattr(analyzer, "last_file_info", None)
+
+    if analyzer.name == "Page Content Analysis":
+        meta["page_text"] = getattr(analyzer, "page_text", "")
+        meta["scripts"] = list(getattr(analyzer, "scripts", []))
 
 
 def _build_recommendation(category: RiskCategory) -> str:

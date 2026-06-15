@@ -78,6 +78,22 @@ class FileDownloadInfo:
 
 
 @dataclass
+class ThreatClassification:
+    """A detected attack technique, orthogonal to the overall risk verdict.
+
+    A single URL may carry several classifications (e.g. ClickFix + encoded
+    command). Each maps to a MITRE ATT&CK technique for analyst pivoting.
+    """
+
+    id: str  # stable slug, e.g. "clickfix"
+    label: str  # human-readable, e.g. "ClickFix"
+    attack_id: str  # MITRE ATT&CK technique id, e.g. "T1204.004"
+    attack_name: str  # ATT&CK technique name, e.g. "Malicious Copy and Paste"
+    severity: str  # "info", "low", "medium", "high", "critical"
+    evidence: list[str] = field(default_factory=list)  # what triggered it
+
+
+@dataclass
 class DiscoveredLink:
     """A link/button found and followed during active link discovery."""
 
@@ -109,3 +125,4 @@ class ScanReport:
     file_download: FileDownloadInfo | None = None
     # Keys: initial, initial_url, cta, cta_url, cta_text
     multi_screenshots: dict = field(default_factory=dict)
+    threat_classifications: list[ThreatClassification] = field(default_factory=list)
