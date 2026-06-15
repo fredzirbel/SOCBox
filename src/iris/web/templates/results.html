@@ -23,6 +23,9 @@
     <p id="recommendation-text"></p>
 </section>
 
+<!-- Threat classifications (hidden until any are detected) -->
+<div id="threat-tags" class="threat-tags" style="display:none;"></div>
+
 <!-- Action buttons at top -->
 <div class="actions">
     <a href="/" class="btn btn-primary">New Scan</a>
@@ -193,7 +196,8 @@
     var _reportData = {
         url: "", defangedUrl: "", riskCategory: "", confidence: 0,
         timestamp: "", ip: "", domain: "", recommendation: "",
-        redirectChain: [], feedResults: [], findings: [], fileDownload: null
+        redirectChain: [], feedResults: [], findings: [], fileDownload: null,
+        classifications: []
     };
 
     /* ---- Helper: escape HTML entities ---- */
@@ -268,6 +272,11 @@
         return "";
     }
 
+    /* OSINT entries that duplicate the (now clickable) Threat Feed rows. */
+    var OSINT_FEED_DUPES = {
+        "VirusTotal (URL)": 1, "AbuseIPDB": 1, "Google Transparency": 1
+    };
+
     /* ---- already_complete: redirect to static results ---- */
     es.addEventListener("already_complete", function () {
         es.close();
@@ -297,6 +306,8 @@
             document.getElementById("section-osint").style.display = "";
             var html = '<div class="osint-grid">';
             d.links.forEach(function (link) {
+                // Skip pivots already linked from the Threat Feed rows.
+                if (OSINT_FEED_DUPES[link.name]) return;
                 html += '<a href="' + esc(link.url) + '" target="_blank" rel="noopener noreferrer"' +
                     ' class="osint-link osint-' + esc(link.icon_class) + '">' +
                     '<span class="osint-name">' + esc(link.name) + '</span>' +
@@ -367,6 +378,23 @@
         multi: null
     };
 
+    function setScreenshotTitle(n) {
+        var t = document.querySelector("#section-screenshot .section-toggle");
+        if (t) t.textContent = (n === 1 ? "Screenshot" : "Screenshots");
+    }
+
+    function shotItemHtml(label, labelCls, urlText, filename) {
+        var h = '<div class="multi-screenshot-item">' +
+            '<div class="multi-screenshot-label' + (labelCls ? ' ' + labelCls : '') + '">' + esc(label) + '</div>';
+        if (urlText) h += '<div class="multi-screenshot-url">' + esc(defang(urlText)) + '</div>';
+        h += '<img src="/screenshots/' + esc(filename) + '" alt="' + esc(label) +
+            '" class="screenshot-img" title="Click to enlarge">';
+        h += '<div class="screenshot-actions">' +
+            '<button type="button" class="copy-img-link" data-img="/screenshots/' + esc(filename) + '">Copy link</button>' +
+            '</div></div>';
+        return h;
+    }
+
     function renderScreenshots() {
         var body = document.getElementById("screenshot-body");
         if (!body) return;
@@ -374,23 +402,13 @@
         var multi = _screenshotState.multi || {};
         var initial = multi.initial || _screenshotState.singleFilename;
         if (initial || multi.cta) {
+            var count = 0;
             var html = '<div class="multi-screenshot-grid">';
-            if (initial) {
-                html += '<div class="multi-screenshot-item">' +
-                    '<div class="multi-screenshot-label">Initial Page</div>';
-                if (multi.initial_url) html += '<div class="multi-screenshot-url">' + esc(defang(multi.initial_url)) + '</div>';
-                html += '<img src="/screenshots/' + esc(initial) + '" alt="Initial page" class="screenshot-img">' +
-                    '</div>';
-            }
-            if (multi.cta) {
-                html += '<div class="multi-screenshot-item">' +
-                    '<div class="multi-screenshot-label label-cta">After Click: ' + esc(multi.cta_text || "CTA") + '</div>';
-                if (multi.cta_url) html += '<div class="multi-screenshot-url">' + esc(defang(multi.cta_url)) + '</div>';
-                html += '<img src="/screenshots/' + esc(multi.cta) + '" alt="After CTA click" class="screenshot-img">' +
-                    '</div>';
-            }
+            if (initial) { html += shotItemHtml("Initial Page", "", multi.initial_url, initial); count++; }
+            if (multi.cta) { html += shotItemHtml("After Click: " + (multi.cta_text || "CTA"), "label-cta", multi.cta_url, multi.cta); count++; }
             html += '</div>';
             body.innerHTML = html;
+            setScreenshotTitle(count);
             return;
         }
 
@@ -433,7 +451,7 @@
                 ? '<span class="badge badge-malicious">MATCH</span>'
                 : '<span class="badge badge-status-skipped">Not Found</span>';
             var feedNameHtml = esc(f.feed_name);
-            var pivotUrl = f.matched ? getFeedPivotUrl(f.feed_name) : "";
+            var pivotUrl = getFeedPivotUrl(f.feed_name);
             if (pivotUrl) {
                 feedNameHtml = '<a href="' + esc(pivotUrl) + '" target="_blank" rel="noopener noreferrer">' +
                     esc(f.feed_name) + '</a>';
@@ -576,6 +594,29 @@
         renderScreenshots();
     });
 
+    /* ---- threat classifications ---- */
+    function renderThreatTags(items) {
+        var box = document.getElementById("threat-tags");
+        if (!box) return;
+        if (!items || !items.length) { box.style.display = "none"; box.innerHTML = ""; return; }
+        var html = '<span class="threat-tags-label">Threat Classification</span>';
+        items.forEach(function (c) {
+            var tip = (c.evidence || []).join("  •  ");
+            html += '<span class="threat-tag sev-' + esc(c.severity || "info") + '"' +
+                (tip ? ' title="' + esc(tip) + '"' : '') + '>' +
+                '<span class="threat-tag-name">' + esc(c.label) + '</span>' +
+                '<span class="threat-tag-attack">' + esc(c.attack_id) + '</span></span>';
+        });
+        box.innerHTML = html;
+        box.style.display = "";
+    }
+
+    es.addEventListener("classifications", function (e) {
+        var d = JSON.parse(e.data);
+        _reportData.classifications = (d && d.classifications) || [];
+        renderThreatTags(_reportData.classifications);
+    });
+
     /* ---- multi_screenshots ---- */
     es.addEventListener("multi_screenshots", function (e) {
         var d = JSON.parse(e.data);
@@ -620,6 +661,15 @@
         lines.push("");
         lines.push("--- Recommendation ---");
         lines.push(d.recommendation);
+
+        if (d.classifications && d.classifications.length) {
+            lines.push("");
+            lines.push("--- Threat Classification ---");
+            d.classifications.forEach(function (c) {
+                lines.push("[" + (c.severity || "info").toUpperCase() + "] " + c.label +
+                    " (" + c.attack_id + " " + c.attack_name + ")");
+            });
+        }
 
         if (d.feedResults.length) {
             lines.push("");
@@ -820,6 +870,19 @@
     <p>{{ r.recommendation }}</p>
 </section>
 
+<!-- Threat classifications -->
+{% if r.threat_classifications %}
+<div class="threat-tags">
+    <span class="threat-tags-label">Threat Classification</span>
+    {% for c in r.threat_classifications %}
+    <span class="threat-tag sev-{{ c.severity }}"{% if c.evidence %} title="{{ c.evidence | join('  •  ') }}"{% endif %}>
+        <span class="threat-tag-name">{{ c.label }}</span>
+        <span class="threat-tag-attack">{{ c.attack_id }}</span>
+    </span>
+    {% endfor %}
+</div>
+{% endif %}
+
 <!-- Action buttons at top -->
 <div class="actions">
     <a href="/" class="btn btn-primary">New Scan</a>
@@ -830,19 +893,26 @@
 </div>
 
 <!-- Screenshot -->
+{% set shot_ns = namespace(count=0) %}
+{% if multi_screenshots and (multi_screenshots.get('initial') or multi_screenshots.get('cta')) %}
+    {% if multi_screenshots.get('initial') or screenshot_filename %}{% set shot_ns.count = shot_ns.count + 1 %}{% endif %}
+    {% if multi_screenshots.get('cta') %}{% set shot_ns.count = shot_ns.count + 1 %}{% endif %}
+{% elif screenshot_filename %}{% set shot_ns.count = 1 %}{% endif %}
 <section class="card">
     <details open>
-        <summary class="section-toggle">Screenshots</summary>
+        <summary class="section-toggle">{{ "Screenshot" if shot_ns.count == 1 else "Screenshots" }}</summary>
         <div class="section-body">
             {% if multi_screenshots and (multi_screenshots.get('initial') or multi_screenshots.get('cta')) %}
             <div class="multi-screenshot-grid">
                 {% if multi_screenshots.get('initial') or screenshot_filename %}
+                {% set initial_file = multi_screenshots.get('initial') or screenshot_filename %}
                 <div class="multi-screenshot-item">
                     <div class="multi-screenshot-label">Initial Page</div>
                     {% if multi_screenshots.get('initial_url') %}
                     <div class="multi-screenshot-url">{{ multi_screenshots.initial_url|defang }}</div>
                     {% endif %}
-                    <img src="/screenshots/{{ multi_screenshots.get('initial') or screenshot_filename }}" alt="Initial page" class="screenshot-img">
+                    <img src="/screenshots/{{ initial_file }}" alt="Initial page" class="screenshot-img" title="Click to enlarge">
+                    <div class="screenshot-actions"><button type="button" class="copy-img-link" data-img="/screenshots/{{ initial_file }}">Copy link</button></div>
                 </div>
                 {% endif %}
                 {% if multi_screenshots.get('cta') %}
@@ -851,13 +921,15 @@
                     {% if multi_screenshots.get('cta_url') %}
                     <div class="multi-screenshot-url">{{ multi_screenshots.cta_url|defang }}</div>
                     {% endif %}
-                    <img src="/screenshots/{{ multi_screenshots.cta }}" alt="After CTA click" class="screenshot-img">
+                    <img src="/screenshots/{{ multi_screenshots.cta }}" alt="After CTA click" class="screenshot-img" title="Click to enlarge">
+                    <div class="screenshot-actions"><button type="button" class="copy-img-link" data-img="/screenshots/{{ multi_screenshots.cta }}">Copy link</button></div>
                 </div>
                 {% endif %}
             </div>
             {% elif screenshot_filename %}
             <div class="screenshot-wrapper">
-                <img src="/screenshots/{{ screenshot_filename }}" alt="Screenshot of {{ r.url }}" class="screenshot-img">
+                <img src="/screenshots/{{ screenshot_filename }}" alt="Screenshot of {{ r.url }}" class="screenshot-img" title="Click to enlarge">
+                <div class="screenshot-actions"><button type="button" class="copy-img-link" data-img="/screenshots/{{ screenshot_filename }}">Copy link</button></div>
             </div>
             {% else %}
             <div class="screenshot-unavailable">
@@ -911,11 +983,11 @@
                     {% for f in r.feed_results|sort(attribute='display_order')|sort(attribute='matched', reverse=true) %}
                     <tr class="{% if f.matched %}feed-match{% endif %}">
                         <td>
-                            {% if f.matched and f.feed_name == "VirusTotal" and feed_pivots.vt %}
+                            {% if f.feed_name == "VirusTotal" and feed_pivots.vt %}
                             <a href="{{ feed_pivots.vt }}" target="_blank" rel="noopener noreferrer">{{ f.feed_name }}</a>
-                            {% elif f.matched and f.feed_name == "Google Safe Browsing" and feed_pivots.gsb %}
+                            {% elif f.feed_name == "Google Safe Browsing" and feed_pivots.gsb %}
                             <a href="{{ feed_pivots.gsb }}" target="_blank" rel="noopener noreferrer">{{ f.feed_name }}</a>
-                            {% elif f.matched and f.feed_name == "AbuseIPDB" and feed_pivots.abuseipdb %}
+                            {% elif f.feed_name == "AbuseIPDB" and feed_pivots.abuseipdb %}
                             <a href="{{ feed_pivots.abuseipdb }}" target="_blank" rel="noopener noreferrer">{{ f.feed_name }}</a>
                             {% else %}
                             {{ f.feed_name }}
@@ -1200,7 +1272,7 @@
         <summary class="section-toggle">OSINT Links</summary>
         <div class="section-body">
             <div class="osint-grid">
-                {% for link in r.osint_links %}
+                {% for link in r.osint_links if link.name not in ["VirusTotal (URL)", "AbuseIPDB", "Google Transparency"] %}
                 <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" class="osint-link osint-{{ link.icon_class }}">
                     <span class="osint-name">{{ link.name }}</span>
                     <span class="osint-desc">{{ link.description }}</span>
@@ -1401,6 +1473,15 @@
         lines.push("");
         lines.push("--- Recommendation ---");
         lines.push(d.recommendation);
+
+        if (d.threat_classifications && d.threat_classifications.length) {
+            lines.push("");
+            lines.push("--- Threat Classification ---");
+            d.threat_classifications.forEach(function (c) {
+                lines.push("[" + (c.severity || "info").toUpperCase() + "] " + c.label +
+                    " (" + c.attack_id + " " + c.attack_name + ")");
+            });
+        }
 
         if (d.feed_results && d.feed_results.length) {
             lines.push("");

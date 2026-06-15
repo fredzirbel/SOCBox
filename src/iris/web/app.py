@@ -1021,6 +1021,7 @@ def _report_to_copydata(entry: dict[str, Any]) -> dict[str, Any]:
         "feed_results": feed_data,
         "findings": findings,
         "file_download": file_dl,
+        "threat_classifications": [asdict(c) for c in report.threat_classifications],
     }
 
 
