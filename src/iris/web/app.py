@@ -73,6 +73,26 @@ app = FastAPI(title="IRIS", version="0.1.0", lifespan=_lifespan)
 
 templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
 
+
+def _static_version() -> str:
+    """Cache-busting token for static assets.
+
+    Returns the latest mtime of the CSS/JS bundles, appended to their URLs as
+    ``?v=``. It changes whenever those files change (and on each image
+    rebuild), so browsers fetch fresh assets instead of serving a stale cached
+    stylesheet after a redesign.
+    """
+    static_dir = _WEB_DIR / "static"
+    latest = 0.0
+    for name in ("style.css", "theme.js"):
+        path = static_dir / name
+        if path.exists():
+            latest = max(latest, path.stat().st_mtime)
+    return str(int(latest))
+
+
+templates.env.globals["static_v"] = _static_version()
+
 # Severity ordering for findings: highest priority first
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
