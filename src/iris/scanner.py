@@ -14,6 +14,7 @@ from playwright.sync_api import Browser, Playwright, sync_playwright
 
 from iris.analyzers import ALL_ANALYZERS
 from iris.browser import launch_browser
+from iris.dns_util import compute_host_resolver_rule
 from iris.models import (
     AnalyzerResult,
     AnalyzerStatus,
@@ -84,19 +85,38 @@ def _get_browser(url: str) -> tuple[Playwright, Browser]:
     pw = getattr(_tls, "pw", None)
     browser = getattr(_tls, "browser", None)
 
+    # Chromium bakes --host-resolver-rules in at launch and cannot change it
+    # afterwards. A browser cached for an earlier URL therefore carries that
+    # URL's DNS override (or none), which makes it unable to reach a new
+    # domain that needs a different DoH-resolved MAP rule — exactly the
+    # phishing domains this tool exists to analyse. Relaunch when the rule
+    # the current URL requires differs from the cached browser's.
+    required_rule = compute_host_resolver_rule(url)
+
     if pw is not None and browser is not None:
-        try:
-            # Health check — access a property to see if the browser is alive
-            _ = browser.contexts
-            return pw, browser
-        except Exception:
-            logger.warning("Thread-local browser is dead, restarting…")
+        cached_rule = getattr(_tls, "resolver_rule", "")
+        if cached_rule != required_rule:
+            logger.info(
+                "Host-resolver rule changed (%r -> %r); relaunching browser",
+                cached_rule, required_rule,
+            )
             _close_thread_browser()
+            pw = browser = None
+        else:
+            try:
+                # Health check — access a property to see if the browser is alive
+                _ = browser.contexts
+                return pw, browser
+            except Exception:
+                logger.warning("Thread-local browser is dead, restarting…")
+                _close_thread_browser()
+                pw = browser = None
 
     pw = sync_playwright().start()
     browser = launch_browser(pw, url)
     _tls.pw = pw
     _tls.browser = browser
+    _tls.resolver_rule = required_rule
 
     with _all_browsers_lock:
         _all_browsers.append((pw, browser))
@@ -125,6 +145,8 @@ def _close_thread_browser() -> None:
         except Exception:
             pass
         _tls.pw = None
+
+    _tls.resolver_rule = ""
 
 
 def shutdown_browser() -> None:

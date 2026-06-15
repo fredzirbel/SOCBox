@@ -76,6 +76,37 @@ def resolve_hostname(url: str) -> str:
     return ""
 
 
+def compute_host_resolver_rule(url: str) -> str:
+    """Return the Chromium ``--host-resolver-rules`` value needed for *url*.
+
+    Chromium can only learn DNS overrides at launch time, so callers that
+    cache a browser need to know the exact rule a URL requires in order to
+    decide whether a cached browser is still valid for it.
+
+    Returns a ``MAP <host> <ip>`` rule string when the system resolver
+    cannot resolve the host but DoH can; otherwise an empty string, meaning
+    no override is needed (the system resolver handles it).
+
+    Args:
+        url: The URL that will be navigated to.
+
+    Returns:
+        A ``MAP <host> <ip>`` rule string, or ``""`` when no override is needed.
+    """
+    hostname = urlparse(url).hostname or ""
+    if not hostname:
+        return ""
+
+    try:
+        socket.gethostbyname(hostname)
+        return ""  # System DNS works — no override required.
+    except (socket.gaierror, OSError):
+        ip = resolve_hostname(url)
+        if ip:
+            return f"MAP {hostname} {ip}"
+        return ""
+
+
 def build_chromium_args(url: str) -> list[str]:
     """Build Chromium launch arguments, with DNS override if needed.
 
@@ -89,21 +120,13 @@ def build_chromium_args(url: str) -> list[str]:
     Returns:
         List of Chromium CLI argument strings.
     """
-    hostname = urlparse(url).hostname or ""
     args = [
         "--disable-blink-features=AutomationControlled",
     ]
 
-    # Only add host-resolver-rule when system DNS fails — resolve_hostname
-    # handles DoH fallback internally so we avoid a redundant gethostbyname.
-    if hostname:
-        try:
-            socket.gethostbyname(hostname)
-        except (socket.gaierror, OSError):
-            ip = resolve_hostname(url)
-            if ip:
-                rule = f"MAP {hostname} {ip}"
-                args.append(f"--host-resolver-rules={rule}")
-                logger.info("Added host-resolver-rule: %s", rule)
+    rule = compute_host_resolver_rule(url)
+    if rule:
+        args.append(f"--host-resolver-rules={rule}")
+        logger.info("Added host-resolver-rule: %s", rule)
 
     return args
