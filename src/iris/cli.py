@@ -41,6 +41,14 @@ def main() -> None:
         help="Disable colored output",
     )
     parser.add_argument(
+        "-i", "--interactive",
+        action="store_true",
+        help=(
+            "Open the browser on-screen and pause on an unsolvable CAPTCHA so "
+            "you can solve it by hand; analysis resumes once it clears"
+        ),
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
@@ -72,7 +80,13 @@ def main() -> None:
     screenshot_dir = project_root / "screenshots"
     screenshot_dir.mkdir(exist_ok=True)
 
-    report = scan_url(url, config, passive_only=args.no_active, screenshot_dir=str(screenshot_dir))
+    report = scan_url(
+        url,
+        config,
+        passive_only=args.no_active,
+        screenshot_dir=str(screenshot_dir),
+        interactive=args.interactive,
+    )
     render_report(report, verbose=args.verbose)
 
 

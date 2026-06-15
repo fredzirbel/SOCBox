@@ -13,7 +13,7 @@ from typing import Any, Callable
 from playwright.sync_api import Browser, Playwright, sync_playwright
 
 from iris.analyzers import ALL_ANALYZERS
-from iris.browser import launch_browser
+from iris.browser import launch_browser, set_interactive_mode
 from iris.dns_util import compute_host_resolver_rule
 from iris.models import (
     AnalyzerResult,
@@ -69,7 +69,7 @@ _all_browsers_lock = threading.Lock()
 _all_browsers: list[tuple[Playwright, Browser]] = []
 
 
-def _get_browser(url: str) -> tuple[Playwright, Browser]:
+def _get_browser(url: str, interactive: bool = False) -> tuple[Playwright, Browser]:
     """Return the thread-local Playwright + Browser, creating them if needed.
 
     Each worker thread in the scan executor pool maintains its own
@@ -78,6 +78,8 @@ def _get_browser(url: str) -> tuple[Playwright, Browser]:
 
     Args:
         url: The URL to scan (used for initial DNS resolution on launch).
+        interactive: When True, launch the browser on-screen so an operator
+            can solve CAPTCHAs manually (human-in-the-loop mode).
 
     Returns:
         Tuple of (Playwright, Browser).
@@ -85,20 +87,23 @@ def _get_browser(url: str) -> tuple[Playwright, Browser]:
     pw = getattr(_tls, "pw", None)
     browser = getattr(_tls, "browser", None)
 
-    # Chromium bakes --host-resolver-rules in at launch and cannot change it
-    # afterwards. A browser cached for an earlier URL therefore carries that
-    # URL's DNS override (or none), which makes it unable to reach a new
-    # domain that needs a different DoH-resolved MAP rule — exactly the
-    # phishing domains this tool exists to analyse. Relaunch when the rule
-    # the current URL requires differs from the cached browser's.
+    # Chromium bakes --host-resolver-rules (and on-screen vs off-screen window
+    # placement) in at launch and cannot change either afterwards. A browser
+    # cached for an earlier URL therefore carries that URL's DNS override (or
+    # none), which makes it unable to reach a new domain that needs a different
+    # DoH-resolved MAP rule — exactly the phishing domains this tool exists to
+    # analyse. Relaunch when the required rule, or the interactive mode, differs
+    # from what the cached browser was launched with.
     required_rule = compute_host_resolver_rule(url)
 
     if pw is not None and browser is not None:
         cached_rule = getattr(_tls, "resolver_rule", "")
-        if cached_rule != required_rule:
+        cached_interactive = getattr(_tls, "interactive", False)
+        if cached_rule != required_rule or cached_interactive != interactive:
             logger.info(
-                "Host-resolver rule changed (%r -> %r); relaunching browser",
-                cached_rule, required_rule,
+                "Browser launch params changed (rule %r->%r, interactive "
+                "%s->%s); relaunching browser",
+                cached_rule, required_rule, cached_interactive, interactive,
             )
             _close_thread_browser()
             pw = browser = None
@@ -113,10 +118,11 @@ def _get_browser(url: str) -> tuple[Playwright, Browser]:
                 pw = browser = None
 
     pw = sync_playwright().start()
-    browser = launch_browser(pw, url)
+    browser = launch_browser(pw, url, interactive=interactive)
     _tls.pw = pw
     _tls.browser = browser
     _tls.resolver_rule = required_rule
+    _tls.interactive = interactive
 
     with _all_browsers_lock:
         _all_browsers.append((pw, browser))
@@ -147,6 +153,7 @@ def _close_thread_browser() -> None:
         _tls.pw = None
 
     _tls.resolver_rule = ""
+    _tls.interactive = False
 
 
 def shutdown_browser() -> None:
@@ -207,6 +214,7 @@ def scan_url(
     passive_only: bool = False,
     screenshot_dir: str = "",
     on_event: EventCallback = None,
+    interactive: bool = False,
 ) -> ScanReport:
     """Run all analyzers against the URL and produce a ScanReport.
 
@@ -224,10 +232,17 @@ def scan_url(
         passive_only: If True, run lexical-only mode (no network/browser analyzers).
         screenshot_dir: Directory to save screenshots. Empty string disables.
         on_event: Optional callback for streaming events (SSE).
+        interactive: If True, run the browser on-screen and pause on an
+            unsolvable CAPTCHA so the operator can solve it by hand. Intended
+            for local / CLI single-scan use, not the concurrent web server.
 
     Returns:
         A completed ScanReport with scores and findings.
     """
+    # Human-in-the-loop CAPTCHA solving is a process-global browser behaviour;
+    # set it to match this scan's request.
+    set_interactive_mode(interactive)
+
     passive_allowed_analyzers = {
         # Passive mode is lexical-only: no HTTP/DNS/feed/browser/download calls.
         "URL Lexical Analysis",
@@ -279,7 +294,7 @@ def scan_url(
     shared_browser = None
     if not passive_only:
         try:
-            _pw, shared_browser = _get_browser(url)
+            _pw, shared_browser = _get_browser(url, interactive=interactive)
         except Exception as exc:
             logger.warning("Failed to get browser: %s", exc)
 

@@ -61,7 +61,7 @@ def _patch(monkeypatch, rules: dict[str, str], launches: list) -> None:
 
     monkeypatch.setattr(scanner, "sync_playwright", lambda: _FakeSyncPlaywright())
 
-    def _fake_launch(pw, url):
+    def _fake_launch(pw, url, *, interactive=False):
         browser = _FakeBrowser()
         launches.append(browser)
         return browser
@@ -114,5 +114,23 @@ def test_override_then_normal_url_relaunches(monkeypatch) -> None:
     scanner._get_browser("https://legit-example.com")   # rule = ""
 
     assert len(launches) == 2, "stale MAP rule must not leak onto a normal URL"
+
+    _reset_thread_state()
+
+
+def test_interactive_flag_change_relaunches_browser(monkeypatch) -> None:
+    """Switching interactive mode must relaunch (off-screen vs on-screen is
+    baked in at launch and cannot change on a live browser)."""
+    _reset_thread_state()
+    launches: list = []
+    _patch(monkeypatch, rules={}, launches=launches)
+
+    scanner._get_browser("https://example.com", interactive=False)
+    _, b2 = scanner._get_browser("https://example.com", interactive=True)
+    # Same interactive value reuses the browser.
+    _, b3 = scanner._get_browser("https://example.com", interactive=True)
+
+    assert len(launches) == 2, "relaunch on interactive change, reuse when unchanged"
+    assert b2 is b3
 
     _reset_thread_state()

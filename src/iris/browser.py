@@ -16,6 +16,7 @@ Key features:
 
 from __future__ import annotations
 
+import json
 import logging
 import random
 
@@ -94,17 +95,134 @@ _TURNSTILE_POLL_MS = 500
 _VIEWPORT_WIDTH = 1280
 _VIEWPORT_HEIGHT = 720
 
+# ---------------------------------------------------------------------------
+# Interactive (human-in-the-loop) CAPTCHA solving
+# ---------------------------------------------------------------------------
+# When enabled, an interactive CAPTCHA the tool cannot auto-pass (reCAPTCHA /
+# hCaptcha image challenge, interactive Turnstile) pauses the scan so the
+# operator can solve it in the on-screen browser window; analysis resumes
+# automatically once the challenge clears.
+#
+# This is process-global on purpose: it is meant for local / CLI, single-scan
+# use where one human is watching one browser. It is NOT for the concurrent
+# web server (a remote user cannot click a server-side browser — that needs
+# remote browser streaming, e.g. noVNC).
+_INTERACTIVE_MODE = False
 
-def launch_browser(pw: Playwright, url: str) -> Browser:
+# How long to wait for a human to solve a challenge before giving up.
+_CAPTCHA_SOLVE_TIMEOUT_MS = 180_000  # 3 minutes
+_CAPTCHA_POLL_MS = 1000
+
+# Visible-iframe src signatures for interactive CAPTCHA challenge widgets.
+# These match the *challenge* surface (the part requiring human input), not
+# the tiny always-present anchor/checkbox iframe.
+_CAPTCHA_SIGNATURES = {
+    "reCAPTCHA": ["recaptcha/api2/bframe", "recaptcha/enterprise/bframe"],
+    "hCaptcha": ["hcaptcha.com", "newassets.hcaptcha.com"],
+    "Cloudflare Turnstile": ["challenges.cloudflare.com"],
+}
+
+
+def set_interactive_mode(enabled: bool) -> None:
+    """Enable or disable human-in-the-loop CAPTCHA solving (process-global).
+
+    Args:
+        enabled: True to pause on unsolvable CAPTCHAs for manual solving.
+    """
+    global _INTERACTIVE_MODE
+    _INTERACTIVE_MODE = enabled
+
+
+def detect_interactive_captcha(page: Page) -> str:
+    """Return the provider name of a *visible* interactive CAPTCHA, or ``""``.
+
+    Looks for a sufficiently-large (i.e. actively displayed) iframe whose src
+    matches a known challenge-widget signature. The small anchor checkbox and
+    hidden challenge frames are ignored via a minimum-size filter.
+
+    Args:
+        page: The Playwright page to inspect.
+
+    Returns:
+        The provider name (e.g. ``"reCAPTCHA"``) or ``""`` when none is shown.
+    """
+    sigs_json = json.dumps(_CAPTCHA_SIGNATURES)
+    try:
+        return page.evaluate(f"""() => {{
+            const sigs = {sigs_json};
+            const frames = Array.from(document.querySelectorAll('iframe'));
+            for (const f of frames) {{
+                const src = f.src || '';
+                const rect = f.getBoundingClientRect();
+                // Skip invisible / anchor-sized frames.
+                if (rect.width < 100 || rect.height < 100) continue;
+                for (const name in sigs) {{
+                    if (sigs[name].some(p => src.includes(p))) return name;
+                }}
+            }}
+            return '';
+        }}""") or ""
+    except Exception as exc:
+        logger.debug("Interactive CAPTCHA detection failed: %s", exc)
+        return ""
+
+
+def wait_for_manual_captcha_solve(page: Page, provider: str) -> bool:
+    """Pause the scan while the operator solves a CAPTCHA in the browser window.
+
+    Polls until the visible challenge clears, or until the solve timeout
+    elapses. Intended for interactive (on-screen) local runs.
+
+    Args:
+        page: The Playwright page showing the challenge.
+        provider: Provider name for operator-facing messaging.
+
+    Returns:
+        True if the challenge cleared (solved), False on timeout.
+    """
+    timeout_s = _CAPTCHA_SOLVE_TIMEOUT_MS // 1000
+    logger.warning(
+        "Interactive %s CAPTCHA detected — waiting up to %ds for manual solve",
+        provider, timeout_s,
+    )
+    # Operator-facing prompt (the visible channel for a CLI run).
+    print(
+        f"\n[IRIS] {provider} CAPTCHA detected. Solve it in the browser "
+        f"window — analysis resumes automatically once it clears "
+        f"(waiting up to {timeout_s}s)…",
+        flush=True,
+    )
+
+    elapsed = 0
+    while elapsed < _CAPTCHA_SOLVE_TIMEOUT_MS:
+        if not detect_interactive_captcha(page):
+            logger.info("CAPTCHA cleared — resuming analysis")
+            print("[IRIS] CAPTCHA cleared — resuming analysis.\n", flush=True)
+            return True
+        page.wait_for_timeout(_CAPTCHA_POLL_MS)
+        elapsed += _CAPTCHA_POLL_MS
+
+    logger.warning("CAPTCHA not solved within %ds — continuing", timeout_s)
+    print("[IRIS] Timed out waiting for CAPTCHA — continuing analysis.\n", flush=True)
+    return False
+
+
+def launch_browser(pw: Playwright, url: str, *, interactive: bool = False) -> Browser:
     """Launch a browser configured for phishing analysis.
 
-    Uses the system-installed Chrome (headed, off-screen) to get a real
-    TLS fingerprint that passes Cloudflare Turnstile.  Falls back to
-    bundled Chromium in headless mode if system Chrome is unavailable.
+    Uses the system-installed Chrome (headed) to get a real TLS fingerprint
+    that passes Cloudflare Turnstile.  Falls back to bundled Chromium if
+    system Chrome is unavailable.
+
+    By default the window is pushed off-screen so no GUI is visible. In
+    ``interactive`` mode the window is kept on-screen (and the fallback runs
+    headed) so a human operator can solve a CAPTCHA the tool cannot.
 
     Args:
         pw: An active Playwright instance from ``sync_playwright()``.
         url: The URL that will be navigated to (used to build DNS args).
+        interactive: When True, keep the browser window visible and on-screen
+            for human-in-the-loop CAPTCHA solving.
 
     Returns:
         A launched Browser instance.
@@ -116,24 +234,36 @@ def launch_browser(pw: Playwright, url: str) -> Browser:
         "--safebrowsing-disable-download-protection",
     ])
 
-    # Try system Chrome first (headed, off-screen)
+    # Off-screen unless the operator needs to see and click the window.
+    chrome_args = list(base_args)
+    if not interactive:
+        chrome_args.append("--window-position=-9999,-9999")
+
+    # Try system Chrome first (headed)
     try:
         browser = pw.chromium.launch(
             headless=False,
             channel="chrome",
-            args=base_args + ["--window-position=-9999,-9999"],
+            args=chrome_args,
         )
-        logger.debug("Launched system Chrome (headed, off-screen)")
+        logger.debug(
+            "Launched system Chrome (headed, %s)",
+            "on-screen/interactive" if interactive else "off-screen",
+        )
         return browser
     except Exception as exc:
         logger.debug("System Chrome not available: %s", exc)
 
-    # Fallback: bundled Chromium headless
+    # Fallback: bundled Chromium. Must be headed in interactive mode so the
+    # operator can actually see and solve the challenge.
     browser = pw.chromium.launch(
-        headless=True,
+        headless=not interactive,
         args=base_args,
     )
-    logger.debug("Launched bundled Chromium (headless)")
+    logger.debug(
+        "Launched bundled Chromium (%s)",
+        "headed/interactive" if interactive else "headless",
+    )
     return browser
 
 
@@ -229,10 +359,16 @@ def navigate_with_bypass(
         bypassed = _bypass_cloudflare_interstitial(page)
         if bypassed:
             logger.info("Successfully bypassed Cloudflare interstitial for %s", url)
-            return 200
+            status = 200
         else:
             logger.warning("Could not bypass Cloudflare interstitial for %s", url)
-            return status
+
+    # Human-in-the-loop: if an interactive CAPTCHA the tool cannot auto-pass is
+    # showing and interactive mode is on, let the operator solve it on-screen.
+    if _INTERACTIVE_MODE:
+        provider = detect_interactive_captcha(page)
+        if provider:
+            wait_for_manual_captcha_solve(page, provider)
 
     return status
 
