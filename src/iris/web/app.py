@@ -436,8 +436,9 @@ async def index(request: Request) -> HTMLResponse:
         recent = list(_scans.values())[-10:]
     recent.reverse()
     return templates.TemplateResponse(
+        request,
         "index.html",
-        {"request": request, "recent_scans": recent},
+        {"recent_scans": recent},
     )
 
 
@@ -679,9 +680,9 @@ async def results(request: Request, scan_id: str) -> HTMLResponse:
     if streaming:
         # Render skeleton — scan is likely still in progress
         return templates.TemplateResponse(
+            request,
             "results.html",
             {
-                "request": request,
                 "streaming": True,
                 "scan_id": scan_id,
                 "bulk_id": bulk_id,
@@ -692,8 +693,9 @@ async def results(request: Request, scan_id: str) -> HTMLResponse:
         entry = _scans.get(scan_id)
     if entry is None:
         return templates.TemplateResponse(
+            request,
             "error.html",
-            {"request": request, "message": "Scan not found. It may have expired."},
+            {"message": "Scan not found. It may have expired."},
             status_code=404,
         )
 
@@ -703,9 +705,9 @@ async def results(request: Request, scan_id: str) -> HTMLResponse:
     multi_ss = getattr(entry["report"], "multi_screenshots", {}) or {}
 
     return templates.TemplateResponse(
+        request,
         "results.html",
         {
-            "request": request,
             "streaming": False,
             "report_json": report_json,
             "bulk_id": bulk_id,
@@ -1182,9 +1184,9 @@ async def bulk_page(request: Request) -> HTMLResponse:
         bulk_data = json.dumps(bulk_entry, default=str)
 
     return templates.TemplateResponse(
+        request,
         "bulk.html",
         {
-            "request": request,
             "bulk_restore": bulk_data or "null",
         },
     )
