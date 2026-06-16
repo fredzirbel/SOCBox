@@ -148,22 +148,21 @@
 
 <!-- Analyzer Breakdown -->
 <section class="card" id="section-analyzers">
-    <details>
+    <details open>
         <summary class="section-toggle">Analyzer Breakdown</summary>
         <div class="section-body">
+            <div class="score-summary" id="score-summary" style="display:none;"></div>
             <table class="table table--fixed">
                 <colgroup>
-                    <col style="width:55%">
-                    <col style="width:15%">
-                    <col style="width:15%">
-                    <col style="width:15%">
+                    <col style="width:50%">
+                    <col style="width:18%">
+                    <col style="width:32%">
                 </colgroup>
                 <thead>
                     <tr>
                         <th>Analyzer</th>
-                        <th>Status</th>
-                        <th>Score</th>
-                        <th>Weight</th>
+                        <th title="Whether the analyzer ran, was skipped, or errored">Status</th>
+                        <th title="Points this analyzer added to the 0–100 composite (raw score × normalized weight × blend). Hover a cell for the raw numbers.">Contribution</th>
                     </tr>
                 </thead>
                 <tbody id="analyzer-tbody">
@@ -286,7 +285,12 @@
     /* ---- metadata ---- */
     es.addEventListener("metadata", function (e) {
         var d = JSON.parse(e.data);
-        document.getElementById("score-url").textContent = defang(d.url || "");
+        var fanged = d.url || "";
+        var defanged = defang(fanged);
+        document.getElementById("score-url").innerHTML =
+            '<span class="score-url-defanged copy-url" data-copy="' + esc(defanged) +
+            '" data-tooltip="Click to copy" tabindex="0" role="button">' + esc(defanged) + '</span>' +
+            (fanged ? '<span class="score-url-fanged">' + esc(fanged) + '</span>' : '');
         var html = "<p><strong>Scan ID:</strong> " + esc(d.scan_id) + "</p>" +
             "<p><strong>Domain:</strong> " + esc(d.domain) + "</p>" +
             (d.ip ? "<p><strong>Resolved IP:</strong> " + esc(d.ip) + "</p>" : "");
@@ -318,42 +322,93 @@
         }
     });
 
-    /* ---- analyzer ---- */
+    /* ---- analyzer breakdown (accumulate, then render with contributions) ---- */
+    var _analyzerResults = [];
+    var _breakdown = null;
+    var _sevOrder = {critical: 0, high: 1, medium: 2, low: 3, info: 4};
+
+    function analyzerFindingsHtml(r) {
+        if (r.findings && r.findings.length) {
+            var sorted = r.findings.slice().sort(function (a, b) {
+                return (_sevOrder[a.severity] || 5) - (_sevOrder[b.severity] || 5);
+            });
+            var h = '<ul class="findings-list">';
+            sorted.forEach(function (f) {
+                h += '<li onclick="this.classList.toggle(\'expanded\')"><span class="severity severity-' + esc(f.severity) + '">' +
+                    esc(f.severity) + '</span> ' + esc(f.description) +
+                    ' (+' + Math.round(f.score_contribution) + ')</li>';
+            });
+            return h + '</ul>';
+        }
+        if (r.error_message) return '<p class="error-message">' + esc(r.error_message) + '</p>';
+        return '<p class="muted">No findings.</p>';
+    }
+
+    function analyzerContribution(name) {
+        if (!_breakdown) return null;
+        if (name === "Threat Feed Integration")
+            return _breakdown.threat_feeds ? _breakdown.threat_feeds.contribution : null;
+        var list = _breakdown.analyzers || [];
+        for (var i = 0; i < list.length; i++) if (list[i].name === name) return list[i].contribution;
+        return null;
+    }
+
+    function analyzerRowHtml(r, maxContrib) {
+        var isFeed = r.analyzer_name === "Threat Feed Integration";
+        var contrib = analyzerContribution(r.analyzer_name);
+        var cell;
+        if (contrib == null) {
+            cell = '<span class="muted">' + (_breakdown ? "—" : "…") + '</span>';
+        } else {
+            var pct = maxContrib > 0 ? Math.max(3, Math.round(contrib / maxContrib * 100)) : 0;
+            cell = '<div class="contrib"><div class="contrib-bar"><span style="width:' + pct + '%"></span></div>' +
+                '<span class="contrib-pts">' + contrib.toFixed(1) + '</span></div>' +
+                (isFeed ? '<div class="contrib-note">blended at ' + Math.round((_breakdown.feed_blend || 0) * 100) + '%</div>' : '');
+        }
+        var rawTip = 'Raw score ' + r.score.toFixed(1) + ' / weight ' + Math.round(r.max_weight);
+        return '<tr' + (isFeed ? ' class="feed-row"' : '') + '>' +
+            '<td><details><summary>' + esc(r.analyzer_name) + '</summary>' + analyzerFindingsHtml(r) + '</details></td>' +
+            '<td><span class="badge badge-status-' + esc(r.status.toLowerCase()) + '">' + esc(r.status) + '</span></td>' +
+            '<td title="' + esc(rawTip) + '">' + cell + '</td></tr>';
+    }
+
+    function renderAnalyzerTable() {
+        var tbody = document.getElementById("analyzer-tbody");
+        if (!tbody) return;
+        var rows = _analyzerResults.slice();
+        if (_breakdown) {
+            rows.sort(function (a, b) {
+                var ca = analyzerContribution(a.analyzer_name), cb = analyzerContribution(b.analyzer_name);
+                return (cb == null ? -1 : cb) - (ca == null ? -1 : ca);
+            });
+        }
+        var maxC = 0;
+        rows.forEach(function (r) { var c = analyzerContribution(r.analyzer_name); if (c != null && c > maxC) maxC = c; });
+        var html = "";
+        rows.forEach(function (r) { html += analyzerRowHtml(r, maxC); });
+        tbody.innerHTML = html;
+    }
+
+    function renderScoreSummary() {
+        var el = document.getElementById("score-summary");
+        if (!el || !_breakdown) return;
+        var b = _breakdown;
+        var txt = "Composite " + (b.composite != null ? b.composite.toFixed(1) : "—") +
+            " = analyzers (" + Math.round((b.analyzer_blend || 0) * 100) + "%) " + (b.analyzer_total || 0).toFixed(1);
+        if (b.threat_feeds) txt += " + threat feeds (" + Math.round((b.feed_blend || 0) * 100) + "%) " + (b.feed_total || 0).toFixed(1);
+        txt += ". VT severity floor: " + (b.floor_applied != null ? "applied (" + b.floor_applied + ")" : "not applied") + ".";
+        el.textContent = txt;
+        el.style.display = "";
+    }
+
     es.addEventListener("analyzer", function (e) {
         var d = JSON.parse(e.data);
         var r = d.result;
         var loadingEl = document.getElementById("analyzers-loading");
         if (loadingEl) loadingEl.remove();
 
-        var tbody = document.getElementById("analyzer-tbody");
-        var tr = document.createElement("tr");
-
-        /* Build findings list (sorted: critical → info) */
-        var sevOrder = {critical: 0, high: 1, medium: 2, low: 3, info: 4};
-        var findingsHtml = "";
-        if (r.findings && r.findings.length) {
-            var sorted = r.findings.slice().sort(function (a, b) {
-                return (sevOrder[a.severity] || 5) - (sevOrder[b.severity] || 5);
-            });
-            findingsHtml = '<ul class="findings-list">';
-            sorted.forEach(function (f) {
-                findingsHtml += '<li onclick="this.classList.toggle(\'expanded\')"><span class="severity severity-' + esc(f.severity) + '">' +
-                    esc(f.severity) + '</span> ' + esc(f.description) +
-                    ' (+' + Math.round(f.score_contribution) + ')</li>';
-            });
-            findingsHtml += '</ul>';
-        } else if (r.error_message) {
-            findingsHtml = '<p class="error-message">' + esc(r.error_message) + '</p>';
-        } else {
-            findingsHtml = '<p class="muted">No findings.</p>';
-        }
-
-        tr.innerHTML =
-            '<td><details><summary>' + esc(r.analyzer_name) + '</summary>' + findingsHtml + '</details></td>' +
-            '<td><span class="badge badge-status-' + esc(r.status.toLowerCase()) + '">' + esc(r.status) + '</span></td>' +
-            '<td>' + r.score.toFixed(1) + '</td>' +
-            '<td>' + Math.round(r.max_weight) + '</td>';
-        tbody.appendChild(tr);
+        _analyzerResults.push(r);
+        renderAnalyzerTable();
 
         /* Accumulate findings for Copy Report */
         if (r.status === "COMPLETED" && r.findings) {
@@ -365,11 +420,12 @@
                 });
             });
         }
+    });
 
-        /* If this is Link Discovery, also render the discovered links section */
-        if (r.analyzer_name === "Link Discovery Analysis" && r.findings) {
-            /* Link discovery data comes via a separate event — handled below */
-        }
+    es.addEventListener("score_breakdown", function (e) {
+        _breakdown = JSON.parse(e.data);
+        renderAnalyzerTable();
+        renderScoreSummary();
     });
 
     var _screenshotState = {
@@ -390,7 +446,7 @@
         h += '<img src="/screenshots/' + esc(filename) + '" alt="' + esc(label) +
             '" class="screenshot-img" title="Click to enlarge">';
         h += '<div class="screenshot-actions">' +
-            '<button type="button" class="copy-img-link" data-img="/screenshots/' + esc(filename) + '">Copy link</button>' +
+            '<button type="button" class="copy-img-link" data-img="/screenshots/' + esc(filename) + '">Copy screenshot URL</button>' +
             '</div></div>';
         return h;
     }
@@ -862,7 +918,10 @@
 <section class="score-banner score-{{ cat }}">
     <div class="score-value">{{ r.risk_category.value }}</div>
     <div class="score-label">{{ "%.0f" | format(r.confidence) }}% Confidence</div>
-    <div class="score-url">{{ r.url|defang }}</div>
+    <div class="score-url">
+        <span class="score-url-defanged copy-url" data-copy="{{ r.url|defang }}" data-tooltip="Click to copy" tabindex="0" role="button">{{ r.url|defang }}</span>
+        <span class="score-url-fanged">{{ r.url }}</span>
+    </div>
 </section>
 
 <!-- Recommendation -->
@@ -912,7 +971,7 @@
                     <div class="multi-screenshot-url">{{ multi_screenshots.initial_url|defang }}</div>
                     {% endif %}
                     <img src="/screenshots/{{ initial_file }}" alt="Initial page" class="screenshot-img" title="Click to enlarge">
-                    <div class="screenshot-actions"><button type="button" class="copy-img-link" data-img="/screenshots/{{ initial_file }}">Copy link</button></div>
+                    <div class="screenshot-actions"><button type="button" class="copy-img-link" data-img="/screenshots/{{ initial_file }}">Copy screenshot URL</button></div>
                 </div>
                 {% endif %}
                 {% if multi_screenshots.get('cta') %}
@@ -922,14 +981,14 @@
                     <div class="multi-screenshot-url">{{ multi_screenshots.cta_url|defang }}</div>
                     {% endif %}
                     <img src="/screenshots/{{ multi_screenshots.cta }}" alt="After CTA click" class="screenshot-img" title="Click to enlarge">
-                    <div class="screenshot-actions"><button type="button" class="copy-img-link" data-img="/screenshots/{{ multi_screenshots.cta }}">Copy link</button></div>
+                    <div class="screenshot-actions"><button type="button" class="copy-img-link" data-img="/screenshots/{{ multi_screenshots.cta }}">Copy screenshot URL</button></div>
                 </div>
                 {% endif %}
             </div>
             {% elif screenshot_filename %}
             <div class="screenshot-wrapper">
                 <img src="/screenshots/{{ screenshot_filename }}" alt="Screenshot of {{ r.url }}" class="screenshot-img" title="Click to enlarge">
-                <div class="screenshot-actions"><button type="button" class="copy-img-link" data-img="/screenshots/{{ screenshot_filename }}">Copy link</button></div>
+                <div class="screenshot-actions"><button type="button" class="copy-img-link" data-img="/screenshots/{{ screenshot_filename }}">Copy screenshot URL</button></div>
             </div>
             {% else %}
             <div class="screenshot-unavailable">
@@ -1357,30 +1416,33 @@
 
 <!-- Analyzer Breakdown -->
 <section class="card">
-    <details>
+    <details open>
         <summary class="section-toggle">Analyzer Breakdown</summary>
         <div class="section-body">
+            {% if breakdown %}
+            <div class="score-summary">
+                Composite {{ "%.1f" | format(breakdown.composite) }} = analyzers ({{ (breakdown.analyzer_blend * 100) | round | int }}%) {{ "%.1f" | format(breakdown.analyzer_total) }}{% if breakdown.threat_feeds %} + threat feeds ({{ (breakdown.feed_blend * 100) | round | int }}%) {{ "%.1f" | format(breakdown.feed_total) }}{% endif %}. VT severity floor: {% if breakdown.floor_applied is not none %}applied ({{ breakdown.floor_applied }}){% else %}not applied{% endif %}.
+            </div>
+            {% endif %}
             <table class="table table--fixed">
                 <colgroup>
-                    <col style="width:55%">
-                    <col style="width:15%">
-                    <col style="width:15%">
-                    <col style="width:15%">
+                    <col style="width:50%">
+                    <col style="width:18%">
+                    <col style="width:32%">
                 </colgroup>
                 <thead>
                     <tr>
                         <th>Analyzer</th>
-                        <th>Status</th>
-                        <th>Score</th>
-                        <th>Weight</th>
+                        <th title="Whether the analyzer ran, was skipped, or errored">Status</th>
+                        <th title="Points this analyzer added to the 0–100 composite (raw score × normalized weight × blend). Hover a cell for the raw numbers.">Contribution</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for a in r.analyzer_results %}
-                    <tr>
+                    {% for a in analyzer_rows %}
+                    <tr {% if a.is_feed %}class="feed-row"{% endif %}>
                         <td>
                             <details>
-                                <summary>{{ a.analyzer_name }}</summary>
+                                <summary>{{ a.name }}</summary>
                                 {% if a.findings %}
                                 <ul class="findings-list">
                                     {% for f in a.findings | sort_by_severity %}
@@ -1398,12 +1460,19 @@
                             </details>
                         </td>
                         <td>
-                            <span class="badge badge-status-{{ a.status.value | lower }}">
-                                {{ a.status.value }}
-                            </span>
+                            <span class="badge badge-status-{{ a.status | lower }}">{{ a.status }}</span>
                         </td>
-                        <td>{{ "%.1f" | format(a.score) }}</td>
-                        <td>{{ "%.0f" | format(a.max_weight) }}</td>
+                        <td title="Raw score {{ '%.1f' | format(a.raw_score) }} / weight {{ '%.0f' | format(a.max_weight) }}">
+                            {% if a.contribution is not none %}
+                            <div class="contrib">
+                                <div class="contrib-bar"><span style="width:{{ ([3, (a.contribution / max_contrib * 100) | round | int] | max) if max_contrib > 0 else 0 }}%"></span></div>
+                                <span class="contrib-pts">{{ "%.1f" | format(a.contribution) }}</span>
+                            </div>
+                            {% if a.is_feed %}<div class="contrib-note">blended at {{ (breakdown.feed_blend * 100) | round | int }}%</div>{% endif %}
+                            {% else %}
+                            <span class="muted">—</span>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

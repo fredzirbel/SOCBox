@@ -74,6 +74,17 @@
                 var shot = e.target.closest && e.target.closest("img.screenshot-img");
                 if (shot && lb && lbImg) { lbImg.src = shot.src; lb.hidden = false; return; }
 
+                var urlEl = e.target.closest && e.target.closest(".copy-url");
+                if (urlEl) {
+                    var txt = urlEl.getAttribute("data-copy") || urlEl.textContent;
+                    navigator.clipboard.writeText(txt).then(function () {
+                        var prev = urlEl.getAttribute("data-tooltip") || "Click to copy";
+                        urlEl.setAttribute("data-tooltip", "Copied!");
+                        setTimeout(function () { urlEl.setAttribute("data-tooltip", prev); }, 1500);
+                    }).catch(function () {});
+                    return;
+                }
+
                 var copyBtn = e.target.closest && e.target.closest(".copy-img-link");
                 if (copyBtn) {
                     var path = copyBtn.getAttribute("data-img") || "";

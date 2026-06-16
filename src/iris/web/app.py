@@ -724,6 +724,9 @@ async def results(request: Request, scan_id: str) -> HTMLResponse:
     # Extract multi-screenshot data for the template
     multi_ss = getattr(entry["report"], "multi_screenshots", {}) or {}
 
+    # Render-ready analyzer rows (merged with contributions, sorted by impact)
+    analyzer_rows, max_contrib = _analyzer_rows(entry["report"])
+
     return templates.TemplateResponse(
         request,
         "results.html",
@@ -732,6 +735,9 @@ async def results(request: Request, scan_id: str) -> HTMLResponse:
             "report_json": report_json,
             "bulk_id": bulk_id,
             "multi_screenshots": multi_ss,
+            "breakdown": entry["report"].score_breakdown or {},
+            "analyzer_rows": analyzer_rows,
+            "max_contrib": max_contrib,
             **entry,
         },
     )
@@ -964,6 +970,45 @@ async def api_scan_sync(request: Request) -> JSONResponse:
 # ---------------------------------------------------------------------------
 # Report data helper (for Copy Report feature)
 # ---------------------------------------------------------------------------
+
+
+_THREAT_FEED_NAME = "Threat Feed Integration"
+
+
+def _analyzer_rows(report: Any) -> tuple[list[dict[str, Any]], float]:
+    """Merge analyzer results with their score contributions, sorted by impact.
+
+    Produces render-ready rows for the static results template (the streaming
+    path does the equivalent in JS). The Threat Feed analyzer's contribution is
+    its separately-blended value, not an averaged-peer score.
+
+    Returns:
+        (rows sorted by contribution desc with None last, max contribution).
+    """
+    bd = report.score_breakdown or {}
+    contrib_by_name = {a["name"]: a["contribution"] for a in bd.get("analyzers", [])}
+    feed_contrib = (bd.get("threat_feeds") or {}).get("contribution")
+
+    rows: list[dict[str, Any]] = []
+    for ar in report.analyzer_results:
+        is_feed = ar.analyzer_name == _THREAT_FEED_NAME
+        contribution = feed_contrib if is_feed else contrib_by_name.get(ar.analyzer_name)
+        rows.append({
+            "name": ar.analyzer_name,
+            "status": ar.status.value,
+            "findings": ar.findings,
+            "error_message": ar.error_message,
+            "raw_score": ar.score,
+            "max_weight": ar.max_weight,
+            "contribution": contribution,
+            "is_feed": is_feed,
+        })
+
+    rows.sort(key=lambda r: (r["contribution"] is None, -(r["contribution"] or 0.0)))
+    max_contrib = max(
+        [r["contribution"] for r in rows if r["contribution"] is not None] or [0.0]
+    )
+    return rows, max_contrib
 
 
 def _report_to_copydata(entry: dict[str, Any]) -> dict[str, Any]:

@@ -1728,3 +1728,97 @@ main.container { animation: fadeUp .5s var(--transition-slow) both; }
     transition: background var(--transition);
 }
 .lightbox-close:hover { background: rgba(0, 0, 0, 0.7); }
+
+/* ============================================================
+   Banner URLs (defanged primary + fanged) and copy tooltip
+   ============================================================ */
+.score-url {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+.score-url-defanged {
+    cursor: pointer;
+    font-weight: 700;
+    word-break: break-all;
+    border-radius: 4px;
+    padding: 0 0.15rem;
+}
+.score-url-defanged:hover,
+.score-url-defanged:focus-visible { text-decoration: underline; outline: none; }
+.score-url-fanged {
+    font-size: 0.8rem;
+    font-weight: 400;
+    opacity: 0.55;
+    word-break: break-all;
+}
+
+/* Generic hover/focus tooltip driven by data-tooltip */
+[data-tooltip] { position: relative; }
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 6px);
+    transform: translateX(-50%);
+    background: var(--bg-elev);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-family: var(--font-body);
+    letter-spacing: normal;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: var(--shadow-sm);
+    z-index: 200;
+}
+
+/* ============================================================
+   Analyzer breakdown: contribution bars, feed line, summary
+   ============================================================ */
+.score-summary {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.85rem;
+}
+.contrib {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.contrib-bar {
+    flex: 1;
+    height: 8px;
+    min-width: 36px;
+    background: var(--bg-input);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.contrib-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--cs-cyan), var(--cs-blue));
+}
+.contrib-pts {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+.contrib-note {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+tr.feed-row .contrib-bar > span { background: linear-gradient(90deg, var(--cs-orange), var(--cs-red)); }
+tr.feed-row td:first-child summary { color: var(--cs-orange); }
