@@ -35,6 +35,7 @@ dev = [
 [project.scripts]
 iris = "iris.cli:main"
 iris-web = "iris.web.app:main"
+iris-feeds = "iris.feeds_import:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -198,6 +198,26 @@ iris --no-active https://example.com
 iris -c config/local.yaml https://example.com
 ```
 
+### Importing test URLs from threat feeds
+
+Pull recent **live** malicious URLs from public feeds (via their official APIs —
+no scraping) to feed into a scan or the Bulk Scan box:
+
+```bash
+# 20 recent online malware URLs from URLhaus (needs api_keys.urlhaus)
+iris-feeds --source urlhaus --limit 20
+
+# Filter by URLhaus tag, e.g. ClearFake / Mozi
+iris-feeds --source urlhaus --tag ClearFake --limit 10
+
+# OpenPhish phishing feed (no key required); save to a file
+iris-feeds --source openphish --limit 30 --output urls.txt
+```
+
+URLhaus requires a free abuse.ch Auth-Key (https://auth.abuse.ch) in
+`api_keys.urlhaus` (config/local.yaml) or the `URLHAUS_AUTH_KEY` env var. Output
+is one URL per line on stdout — treat it as live malicious infrastructure.
+
 ## API Endpoints
 
 ### Web UI

@@ -5,6 +5,9 @@ api_keys:
   virustotal: ""
   google_safebrowsing: ""
   abuseipdb: ""
+  # abuse.ch Auth-Key (free, from https://auth.abuse.ch) — used by `iris-feeds`
+  # to pull recent URLhaus URLs via the official API instead of scraping.
+  urlhaus: ""
 
 scoring:
   weights:
