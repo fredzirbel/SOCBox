@@ -968,6 +968,143 @@ async def api_scan_sync(request: Request) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
+# v1 TAP API — agent/SOAR-callable URL actions (SlashNext replacement)
+# ---------------------------------------------------------------------------
+
+# IRIS machine verdict -> suggested alert disposition (analyst confirms TP/BTP/FP).
+_SUGGESTED_DISPOSITION = {
+    "Safe": "FP candidate",
+    "Uncertain": "needs review",
+    "Malicious": "TP candidate",
+    "Malicious File Download": "TP candidate",
+    "Suspicious File Download": "needs review",
+}
+
+
+def _report_to_tap(report: Any, scan_id: str, domain: str, ip: str) -> dict[str, Any]:
+    """Serialize a scan into the TAP contract (final_url guaranteed everywhere)."""
+    screenshot_filename = Path(report.screenshot_path).name if report.screenshot_path else ""
+    final_url = (
+        report.final_url
+        or (report.redirect_chain[-1] if report.redirect_chain else "")
+        or report.url
+    )
+    verdict = report.risk_category.value
+    return {
+        "scan_id": scan_id,
+        "url": report.url,
+        "final_url": final_url,
+        "verdict": verdict,
+        "suggested_disposition": _SUGGESTED_DISPOSITION.get(verdict, "needs review"),
+        "disposition": None,
+        "score": report.overall_score,
+        "confidence": report.confidence,
+        "domain": domain,
+        "resolved_ip": ip,
+        "screenshot_url": f"/screenshots/{screenshot_filename}" if screenshot_filename else "",
+        "text": report.page_text or "",
+        "classifications": [asdict(c) for c in report.threat_classifications],
+        "recommendation": report.recommendation,
+    }
+
+
+async def _v1_run_scan(url_raw: str) -> tuple[str, dict] | tuple[None, None]:
+    """Run a scan and store it, returning (scan_id, store entry)."""
+    url = (url_raw or "").strip()
+    if not url:
+        return None, None
+    if not url.startswith(("http://", "https://")):
+        url = f"https://{url}"
+
+    scan_id = uuid.uuid4().hex[:12]
+    extracted = tldextract.extract(url)
+    domain = f"{extracted.domain}.{extracted.suffix}"
+    ip = _resolve_ip(url)
+
+    def run_scan():
+        report = scan_url(
+            url=url, config=_config, passive_only=False,
+            screenshot_dir=str(_SCREENSHOT_DIR),
+        )
+        report.resolved_ip = ip
+        report.osint_links = generate_osint_links(
+            url, domain, ip, redirect_chain=report.redirect_chain,
+        )
+        return report
+
+    report = await asyncio.get_event_loop().run_in_executor(_scan_executor, run_scan)
+    screenshot_filename = Path(report.screenshot_path).name if report.screenshot_path else ""
+    with _scans_lock:
+        _scans[scan_id] = {
+            "scan_id": scan_id, "report": report, "domain": domain,
+            "ip": ip, "screenshot_filename": screenshot_filename,
+        }
+    _save_cache()
+    with _scans_lock:
+        return scan_id, _scans[scan_id]
+
+
+async def _v1_resolve(request: Request) -> tuple[str, dict] | tuple[None, None]:
+    """Resolve a v1 action to a scan: existing ?scan_id= or a fresh {url} scan."""
+    sid = request.query_params.get("scan_id")
+    if sid:
+        with _scans_lock:
+            entry = _scans.get(sid)
+        return (sid, entry) if entry else (None, None)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    return await _v1_run_scan(body.get("url", ""))
+
+
+@app.post("/api/v1/url/scan")
+async def v1_url_scan(request: Request) -> JSONResponse:
+    """Full TAP result for a URL: verdict, final_url, text, screenshot, classifications."""
+    scan_id, entry = await _v1_resolve(request)
+    if not entry:
+        return JSONResponse({"error": "URL or scan_id required"}, status_code=400)
+    return JSONResponse(
+        _report_to_tap(entry["report"], scan_id, entry["domain"], entry["ip"])
+    )
+
+
+@app.post("/api/v1/url/text")
+async def v1_url_text(request: Request) -> JSONResponse:
+    """Get URL Text TAP — visible text of the final landing page."""
+    scan_id, entry = await _v1_resolve(request)
+    if not entry:
+        return JSONResponse({"error": "URL or scan_id required"}, status_code=400)
+    tap = _report_to_tap(entry["report"], scan_id, entry["domain"], entry["ip"])
+    return JSONResponse({"scan_id": scan_id, "final_url": tap["final_url"], "text": tap["text"]})
+
+
+@app.post("/api/v1/url/screenshot")
+async def v1_url_screenshot(request: Request) -> JSONResponse:
+    """Get URL Screenshot TAP — final landing page screenshot (URL annotated)."""
+    scan_id, entry = await _v1_resolve(request)
+    if not entry:
+        return JSONResponse({"error": "URL or scan_id required"}, status_code=400)
+    tap = _report_to_tap(entry["report"], scan_id, entry["domain"], entry["ip"])
+    return JSONResponse({
+        "scan_id": scan_id, "final_url": tap["final_url"], "screenshot_url": tap["screenshot_url"],
+    })
+
+
+@app.post("/api/v1/url/threat-intel")
+async def v1_url_threat_intel(request: Request) -> JSONResponse:
+    """Get URL Threat Intel TAP — verdict + suggested disposition + final URL."""
+    scan_id, entry = await _v1_resolve(request)
+    if not entry:
+        return JSONResponse({"error": "URL or scan_id required"}, status_code=400)
+    tap = _report_to_tap(entry["report"], scan_id, entry["domain"], entry["ip"])
+    return JSONResponse({k: tap[k] for k in (
+        "scan_id", "final_url", "verdict", "suggested_disposition",
+        "score", "confidence", "classifications",
+    )})
+
+
+# ---------------------------------------------------------------------------
 # Report data helper (for Copy Report feature)
 # ---------------------------------------------------------------------------
 

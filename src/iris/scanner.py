@@ -428,6 +428,12 @@ def scan_url(
         multi_screenshots=multi_screenshots,
         threat_classifications=classifications,
         score_breakdown=breakdown,
+        final_url=(
+            multi_screenshots.get("initial_url")
+            or (scan_meta["redirect_chain"][-1] if scan_meta["redirect_chain"] else "")
+            or url
+        ),
+        page_text=scan_meta.get("page_text", ""),
     )
 
 

@@ -127,3 +127,5 @@ class ScanReport:
     multi_screenshots: dict = field(default_factory=dict)
     threat_classifications: list[ThreatClassification] = field(default_factory=list)
     score_breakdown: dict = field(default_factory=dict)
+    final_url: str = ""
+    page_text: str = ""
