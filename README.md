@@ -41,10 +41,10 @@ IRIS scans URLs across 8 security dimensions simultaneously — lexical analysis
 Pull and run the pre-built image:
 
 ```bash
-docker run -p 8000:8000 --shm-size=2g ghcr.io/fredzirbel/iris:latest
+docker run -p 8080:8000 --shm-size=2g ghcr.io/fredzirbel/iris:latest
 ```
 
-Open **http://localhost:8000** and paste a URL to scan.
+Open **http://localhost:8080** and paste a URL to scan.
 
 ### Docker Compose (with API Keys)
 
@@ -67,7 +67,7 @@ docker compose up --build
 Alternatively, pass API keys as environment variables:
 
 ```bash
-docker run -p 8000:8000 --shm-size=2g \
+docker run -p 8080:8000 --shm-size=2g \
   -e VIRUSTOTAL_API_KEY=your_key \
   -e GOOGLE_SAFEBROWSING_API_KEY=your_key \
   -e ABUSEIPDB_API_KEY=your_key \
@@ -225,12 +225,12 @@ iris -c config/local.yaml https://example.com
 
 ```bash
 # Synchronous scan — blocks until complete (set timeout ≥ 120s)
-curl -X POST http://localhost:8000/api/scan/sync \
+curl -X POST http://localhost:8080/api/scan/sync \
   -H "Content-Type: application/json" \
   -d '{"url": "https://suspicious-site.xyz"}'
 
 # Retrieve a previous scan
-curl http://localhost:8000/api/results/abc123def456
+curl http://localhost:8080/api/results/abc123def456
 ```
 
 ## Development

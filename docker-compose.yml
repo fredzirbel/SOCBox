@@ -8,7 +8,9 @@
 #
 #   2. Run:  docker compose up --build
 #
-#   3. Open:  http://localhost:8000
+#   3. Open:  http://localhost:8080
+#      (host port 8080 -> container 8000; 8080 avoids the Windows/WinNAT
+#       reserved-port range that can block 8000)
 #
 # Alternatively, pass API keys as environment variables (see below).
 # =============================================================================
@@ -18,7 +20,8 @@ services:
     build: .
     container_name: iris
     ports:
-      - "8000:8000"
+      # host 8080 -> container 8000 (8080 sidesteps Windows reserved ports)
+      - "8080:8000"
 
     # Chrome needs more than the default 64 MB shared memory
     shm_size: "2gb"
