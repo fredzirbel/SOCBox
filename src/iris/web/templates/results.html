@@ -26,6 +26,15 @@
 <!-- Threat classifications (hidden until any are detected) -->
 <div id="threat-tags" class="threat-tags" style="display:none;"></div>
 
+<!-- Analyst disposition -->
+<div class="disposition-bar" data-scan-id="{{ scan_id }}">
+    <span class="disposition-label">Disposition:</span>
+    <button type="button" class="disp-btn" data-disp="TP">True Positive</button>
+    <button type="button" class="disp-btn" data-disp="BTP">Benign TP</button>
+    <button type="button" class="disp-btn" data-disp="FP">False Positive</button>
+    <span class="disp-status"></span>
+</div>
+
 <!-- Action buttons at top -->
 <div class="actions">
     <a href="/" class="btn btn-primary">New Scan</a>
@@ -941,6 +950,16 @@
     {% endfor %}
 </div>
 {% endif %}
+
+<!-- Analyst disposition -->
+<div class="disposition-bar" data-scan-id="{{ scan_id }}">
+    <span class="disposition-label">Disposition:</span>
+    {% set dval = disposition.disposition if disposition else "" %}
+    <button type="button" class="disp-btn {% if dval == 'TP' %}active{% endif %}" data-disp="TP">True Positive</button>
+    <button type="button" class="disp-btn {% if dval == 'BTP' %}active{% endif %}" data-disp="BTP">Benign TP</button>
+    <button type="button" class="disp-btn {% if dval == 'FP' %}active{% endif %}" data-disp="FP">False Positive</button>
+    <span class="disp-status">{% if dval %}Set: {{ dval }}{% endif %}</span>
+</div>
 
 <!-- Action buttons at top -->
 <div class="actions">

@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.responses import StreamingResponse
 
+from iris import store
 from iris.config import get_api_key, load_config
 from iris.scanner import scan_url, shutdown_browser
 from iris.web.defang import defang as defang_url
@@ -152,6 +153,7 @@ _scans_lock = threading.RLock()
 _bulk_scans_lock = threading.RLock()
 _CACHE_FILE = _SCREENSHOT_DIR / "scan_cache.json"
 _BULK_CACHE_FILE = _SCREENSHOT_DIR / "bulk_cache.json"
+_DB_PATH = _SCREENSHOT_DIR / "iris.db"  # durable scans + dispositions
 _CACHE_TTL = 86400  # 24 hours in seconds
 
 logger = logging.getLogger(__name__)
@@ -174,6 +176,7 @@ def _serialize_scans() -> list[dict]:
             "domain": entry["domain"],
             "ip": entry["ip"],
             "screenshot_filename": entry["screenshot_filename"],
+            "disposition": entry.get("disposition"),
             "report": asdict(entry["report"]),
         }
         # Store enum values as strings for JSON
@@ -202,6 +205,7 @@ def _deserialize_scans(entries: list[dict]) -> dict[str, dict[str, Any]]:
         Finding,
         RiskCategory,
         ScanReport,
+        ThreatClassification,
     )
 
     # Build reverse lookup for enums
@@ -250,6 +254,10 @@ def _deserialize_scans(entries: list[dict]) -> dict[str, dict[str, Any]]:
             if fd:
                 file_download = FileDownloadInfo(**fd)
 
+            classifications = [
+                ThreatClassification(**tc) for tc in rd.get("threat_classifications", [])
+            ]
+
             report = ScanReport(
                 url=rd["url"],
                 overall_score=rd["overall_score"],
@@ -265,6 +273,11 @@ def _deserialize_scans(entries: list[dict]) -> dict[str, dict[str, Any]]:
                 resolved_ip=rd.get("resolved_ip", ""),
                 discovered_links=discovered_links,
                 file_download=file_download,
+                multi_screenshots=rd.get("multi_screenshots", {}) or {},
+                threat_classifications=classifications,
+                score_breakdown=rd.get("score_breakdown", {}) or {},
+                final_url=rd.get("final_url", ""),
+                page_text=rd.get("page_text", ""),
             )
 
             scans[entry["scan_id"]] = {
@@ -273,6 +286,7 @@ def _deserialize_scans(entries: list[dict]) -> dict[str, dict[str, Any]]:
                 "domain": entry.get("domain", ""),
                 "ip": entry.get("ip", ""),
                 "screenshot_filename": entry.get("screenshot_filename", ""),
+                "disposition": entry.get("disposition"),
             }
         except Exception as exc:
             logger.warning("Skipping corrupt cache entry %s: %s", entry.get("scan_id"), exc)
@@ -310,15 +324,18 @@ def _load_cache() -> None:
     Silently ignores missing or corrupt cache files.
     """
     global _scans
-    if not _CACHE_FILE.exists():
-        return
     try:
-        data = json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+        store.init(_DB_PATH)
+        entries = store.load_entries()
+        # One-time migration: import any legacy JSON cache into SQLite.
+        if not entries and _CACHE_FILE.exists():
+            entries = json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+            store.save_entries(entries)
         with _scans_lock:
-            _scans = _prune_expired(_deserialize_scans(data))
-        logger.info("Loaded %d cached scan(s) from disk.", len(_scans))
+            _scans = _prune_expired(_deserialize_scans(entries))
+        logger.info("Loaded %d scan(s) from store.", len(_scans))
     except Exception as exc:
-        logger.warning("Failed to load scan cache: %s", exc)
+        logger.warning("Failed to load scan store: %s", exc)
 
 
 def _save_cache() -> None:
@@ -331,24 +348,9 @@ def _save_cache() -> None:
     try:
         with _scans_lock:
             _scans = _prune_expired(_scans)
-        payload = json.dumps(_serialize_scans(), default=str, ensure_ascii=False)
-        fd, tmp_path = tempfile.mkstemp(
-            dir=str(_SCREENSHOT_DIR), suffix=".tmp", prefix="scan_cache_",
-        )
-        closed = False
-        try:
-            os.write(fd, payload.encode("utf-8"))
-            os.close(fd)
-            closed = True
-            os.replace(tmp_path, str(_CACHE_FILE))
-        except Exception:
-            if not closed:
-                os.close(fd)
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-            raise
+        store.save_entries(_serialize_scans())
     except Exception as exc:
-        logger.warning("Failed to save scan cache: %s", exc)
+        logger.warning("Failed to save scan store: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -981,8 +983,9 @@ _SUGGESTED_DISPOSITION = {
 }
 
 
-def _report_to_tap(report: Any, scan_id: str, domain: str, ip: str) -> dict[str, Any]:
-    """Serialize a scan into the TAP contract (final_url guaranteed everywhere)."""
+def _report_to_tap(entry: dict, scan_id: str) -> dict[str, Any]:
+    """Serialize a scan entry into the TAP contract (final_url guaranteed)."""
+    report = entry["report"]
     screenshot_filename = Path(report.screenshot_path).name if report.screenshot_path else ""
     final_url = (
         report.final_url
@@ -996,11 +999,11 @@ def _report_to_tap(report: Any, scan_id: str, domain: str, ip: str) -> dict[str,
         "final_url": final_url,
         "verdict": verdict,
         "suggested_disposition": _SUGGESTED_DISPOSITION.get(verdict, "needs review"),
-        "disposition": None,
+        "disposition": entry.get("disposition"),
         "score": report.overall_score,
         "confidence": report.confidence,
-        "domain": domain,
-        "resolved_ip": ip,
+        "domain": entry.get("domain", ""),
+        "resolved_ip": entry.get("ip", ""),
         "screenshot_url": f"/screenshots/{screenshot_filename}" if screenshot_filename else "",
         "text": report.page_text or "",
         "classifications": [asdict(c) for c in report.threat_classifications],
@@ -1064,9 +1067,7 @@ async def v1_url_scan(request: Request) -> JSONResponse:
     scan_id, entry = await _v1_resolve(request)
     if not entry:
         return JSONResponse({"error": "URL or scan_id required"}, status_code=400)
-    return JSONResponse(
-        _report_to_tap(entry["report"], scan_id, entry["domain"], entry["ip"])
-    )
+    return JSONResponse(_report_to_tap(entry, scan_id))
 
 
 @app.post("/api/v1/url/text")
@@ -1075,7 +1076,7 @@ async def v1_url_text(request: Request) -> JSONResponse:
     scan_id, entry = await _v1_resolve(request)
     if not entry:
         return JSONResponse({"error": "URL or scan_id required"}, status_code=400)
-    tap = _report_to_tap(entry["report"], scan_id, entry["domain"], entry["ip"])
+    tap = _report_to_tap(entry, scan_id)
     return JSONResponse({"scan_id": scan_id, "final_url": tap["final_url"], "text": tap["text"]})
 
 
@@ -1085,7 +1086,7 @@ async def v1_url_screenshot(request: Request) -> JSONResponse:
     scan_id, entry = await _v1_resolve(request)
     if not entry:
         return JSONResponse({"error": "URL or scan_id required"}, status_code=400)
-    tap = _report_to_tap(entry["report"], scan_id, entry["domain"], entry["ip"])
+    tap = _report_to_tap(entry, scan_id)
     return JSONResponse({
         "scan_id": scan_id, "final_url": tap["final_url"], "screenshot_url": tap["screenshot_url"],
     })
@@ -1097,11 +1098,47 @@ async def v1_url_threat_intel(request: Request) -> JSONResponse:
     scan_id, entry = await _v1_resolve(request)
     if not entry:
         return JSONResponse({"error": "URL or scan_id required"}, status_code=400)
-    tap = _report_to_tap(entry["report"], scan_id, entry["domain"], entry["ip"])
+    tap = _report_to_tap(entry, scan_id)
     return JSONResponse({k: tap[k] for k in (
         "scan_id", "final_url", "verdict", "suggested_disposition",
         "score", "confidence", "classifications",
     )})
+
+
+_VALID_DISPOSITIONS = {"TP", "BTP", "FP"}
+
+
+@app.post("/api/v1/scan/{scan_id}/disposition")
+async def v1_set_disposition(scan_id: str, request: Request) -> JSONResponse:
+    """Record an analyst disposition (TP / Benign TP / FP) for a scan."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    disp = (body.get("disposition") or "").upper().strip()
+    if disp not in _VALID_DISPOSITIONS:
+        return JSONResponse(
+            {"error": "disposition must be one of TP, BTP, FP"}, status_code=400,
+        )
+    analyst = (body.get("analyst") or "").strip()
+    note = (body.get("note") or "").strip()
+    at = datetime.now(timezone.utc).isoformat()
+    disp_obj = {"disposition": disp, "by": analyst, "at": at, "note": note}
+
+    with _scans_lock:
+        entry = _scans.get(scan_id)
+        if entry is not None:
+            entry["disposition"] = disp_obj
+
+    persisted = store.set_disposition(scan_id, disp, analyst, note, at)
+    if not persisted:
+        if entry is None:
+            return JSONResponse({"error": "scan_id not found"}, status_code=404)
+        # Row not in store yet — persist the scan, then set the disposition.
+        store.save_entries(_serialize_scans())
+        store.set_disposition(scan_id, disp, analyst, note, at)
+
+    return JSONResponse({"scan_id": scan_id, "disposition": disp_obj})
 
 
 # ---------------------------------------------------------------------------

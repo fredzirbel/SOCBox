@@ -1844,3 +1844,36 @@ tr.feed-row td:first-child summary { color: var(--cs-orange); }
 .feed-limit { width: 5rem; }
 .feed-tag { flex: 1; min-width: 12rem; }
 .feed-msg { font-size: 0.8rem; color: var(--text-muted); }
+
+/* ---- Analyst disposition bar ---- */
+.disposition-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 1.25rem;
+}
+.disposition-label {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+.disp-btn {
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-card);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+.disp-btn:hover { border-color: var(--accent); color: var(--accent); }
+.disp-btn.active[data-disp="TP"]  { background: var(--red);    border-color: var(--red);    color: #fff; }
+.disp-btn.active[data-disp="BTP"] { background: var(--yellow); border-color: var(--yellow); color: #1e1e1e; }
+.disp-btn.active[data-disp="FP"]  { background: var(--green);  border-color: var(--green);  color: #04121d; }
+.disp-status { font-size: 0.8rem; color: var(--text-muted); }

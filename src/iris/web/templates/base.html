@@ -74,6 +74,26 @@
                 var shot = e.target.closest && e.target.closest("img.screenshot-img");
                 if (shot && lb && lbImg) { lbImg.src = shot.src; lb.hidden = false; return; }
 
+                var dispBtn = e.target.closest && e.target.closest(".disp-btn");
+                if (dispBtn) {
+                    var bar = dispBtn.closest(".disposition-bar");
+                    var sid = bar && bar.getAttribute("data-scan-id");
+                    var status = bar && bar.querySelector(".disp-status");
+                    if (!sid) return;
+                    fetch("/api/v1/scan/" + encodeURIComponent(sid) + "/disposition", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ disposition: dispBtn.getAttribute("data-disp") }),
+                    }).then(function (r) { return r.json(); }).then(function (d) {
+                        if (d.error) { if (status) status.textContent = "Error: " + d.error; return; }
+                        bar.querySelectorAll(".disp-btn").forEach(function (b) {
+                            b.classList.toggle("active", b === dispBtn);
+                        });
+                        if (status) status.textContent = "Set: " + d.disposition.disposition;
+                    }).catch(function () { if (status) status.textContent = "Error saving"; });
+                    return;
+                }
+
                 var urlEl = e.target.closest && e.target.closest(".copy-url");
                 if (urlEl) {
                     var txt = urlEl.getAttribute("data-copy") || urlEl.textContent;
