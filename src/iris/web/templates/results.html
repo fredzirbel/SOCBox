@@ -2,6 +2,10 @@
 
 {% block title %}IRIS &mdash; Results{% endblock %}
 
+{# Streaming mode embeds the live CAPTCHA-solver browser — give it the wide
+   container so the viewer is large and easy to read. #}
+{% block container_class %}{% if streaming %}container-wide{% endif %}{% endblock %}
+
 {% block content %}
 
 {% if streaming %}
@@ -16,6 +20,23 @@
     </div>
     <div class="score-label" id="score-label">Scanning&hellip;</div>
     <div class="score-url" id="score-url"></div>
+</section>
+
+<!-- Live CAPTCHA solver (noVNC). Shown only when a scan hits an un-automatable
+     CAPTCHA and an analyst is present; the embedded view is the real detonation
+     browser, so the analyst solves it here and the scan resumes automatically. -->
+<section class="card captcha-solver" id="captcha-solver" style="display:none;">
+    <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.4rem;">
+        <span class="badge" style="background:#3a2a0a;color:#fbbf24;">Action required</span>
+        <strong id="captcha-solver-title">Solve the challenge to continue</strong>
+    </div>
+    <p id="captcha-solver-help" style="margin:0 0 0.6rem;font-size:0.9rem;opacity:0.85;">
+        A CAPTCHA is blocking this scan. Solve it in the live browser below &mdash;
+        the scan resumes automatically once it's solved.
+    </p>
+    <iframe id="captcha-solver-iframe" title="Live browser &mdash; solve the CAPTCHA"
+            allow="clipboard-read; clipboard-write"
+            style="display:block;width:100%;aspect-ratio:16/9;max-height:84vh;border:1px solid var(--border,#333);border-radius:6px;background:#000;"></iframe>
 </section>
 
 <!-- Recommendation (hidden until score arrives) -->
@@ -207,6 +228,25 @@
         }
     } catch (e) {}
 
+    function openCaptchaSolver(provider, viewUrl) {
+        /* Reveal the embedded live browser pointed at the takeover session. */
+        var panel = document.getElementById("captcha-solver");
+        var iframe = document.getElementById("captcha-solver-iframe");
+        var title = document.getElementById("captcha-solver-title");
+        if (!panel || !iframe) return;
+        if (title) title.textContent = "Solve the " + (provider || "CAPTCHA") + " to continue";
+        if (iframe.src !== viewUrl) iframe.src = viewUrl;
+        panel.style.display = "";
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function closeCaptchaSolver() {
+        var panel = document.getElementById("captcha-solver");
+        var iframe = document.getElementById("captcha-solver-iframe");
+        if (panel) panel.style.display = "none";
+        if (iframe) iframe.src = "about:blank";  /* drop the live VNC connection */
+    }
+
     es.addEventListener("action_required", function (e) {
         try {
             var d = JSON.parse(e.data);
@@ -216,7 +256,10 @@
                 new Notification("IRIS: action required", { body: msg });
             }
             var lbl = document.getElementById("score-label");
-            if (lbl) lbl.textContent = "Action required — solve the CAPTCHA in the browser";
+            if (lbl) lbl.textContent = "Action required — solve the CAPTCHA below";
+            /* view_url is present only for human-present scans with the live
+               solver enabled; otherwise we just notified the analyst. */
+            if (d.view_url) openCaptchaSolver(d.provider, d.view_url);
         } catch (err) {}
     });
 
@@ -709,9 +752,26 @@
         renderScreenshots();
     });
 
+    /* Desktop ping when a scan finishes while the analyst has tabbed away.
+       Reuses the notification permission requested for CAPTCHA gates above;
+       stays silent when the tab is visible so it never interrupts active viewing. */
+    function notifyScanComplete() {
+        try {
+            if (!document.hidden) return;
+            if (!window.Notification || Notification.permission !== "granted") return;
+            var verdict = _reportData.riskCategory || "Scan complete";
+            var pct = (typeof _reportData.confidence === "number")
+                ? Math.round(_reportData.confidence) + "% confidence" : "";
+            var body = [pct, _reportData.defangedUrl].filter(Boolean).join("\n");
+            new Notification("IRIS: " + verdict, { body: body, tag: "iris-scan-" + scanId });
+        } catch (e) {}
+    }
+
     /* ---- complete ---- */
     es.addEventListener("complete", function () {
         es.close();
+        closeCaptchaSolver();
+        notifyScanComplete();
         /* Remove any leftover loading indicators */
         var loaders = document.querySelectorAll(".skeleton-loading");
         loaders.forEach(function (el) { el.remove(); });

@@ -22,9 +22,28 @@ services:
     ports:
       # host 8080 -> container 8000 (8080 sidesteps Windows reserved ports)
       - "8080:8000"
+      # noVNC live-browser viewer for transparent CAPTCHA solving.
+      # SECURITY: this is a controllable browser on malicious pages — keep it
+      # behind API auth / SSO (#6) or a VPN before any network exposure.
+      - "6080:6080"
+
+    environment:
+      # Password x11vnc enforces on the noVNC session. MUST match
+      # interactive.vnc_password in config/local.yaml (which the app embeds in
+      # the viewer URL). Empty = no VNC password (dev only).
+      - VNC_PASSWORD=${VNC_PASSWORD:-}
 
     # Chrome needs more than the default 64 MB shared memory
     shm_size: "2gb"
+
+    # Pin reliable upstream resolvers.  Docker's embedded DNS (127.0.0.11)
+    # can intermittently fail to resolve target domains inside the container,
+    # which surfaced as transient ERROR rows in Bulk Scan.  Cloudflare + Google
+    # public resolvers make name resolution dependable; the requests-based
+    # analyzers also carry a DNS-over-HTTPS fallback for anything these block.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
 
     volumes:
       # Mount local API key config (create from default.yaml, gitignored)

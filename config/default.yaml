@@ -15,6 +15,38 @@ notifications:
   webhook_url: ""
   webhook_timeout: 10
 
+# Transparent in-browser CAPTCHA solving (self-hosted noVNC). When a single
+# analyst-initiated web scan hits an un-automatable CAPTCHA, IRIS surfaces the
+# live detonation browser in the analyst's tab so they can solve it; the scan
+# then continues to the real landing page. Bulk / agent / async scans never
+# block on a human regardless of this setting.
+#
+# SECURITY: the noVNC viewer is a live, controllable browser pointed at
+# malicious pages. It MUST sit behind API auth / SSO (item #6) or a VPN before
+# any network exposure. The vnc_password + per-scan session token are a v1
+# guard, not a substitute for that.
+interactive:
+  enabled: false
+  # Base URL the *analyst's browser* uses to reach the noVNC viewer. Defaults to
+  # the same host on port 6080; override when behind a reverse proxy.
+  novnc_public_url: "http://localhost:6080/vnc.html"
+  # Shared VNC password enforced by x11vnc (-rfbauth). Set a real value in
+  # local.yaml. Empty disables the auto-fill (analyst is prompted by noVNC).
+  vnc_password: ""
+  # How long to wait for the analyst to solve before giving up (notice -> open
+  # viewer -> solve round trip). Milliseconds.
+  session_timeout_ms: 300000
+  # X display the headed takeover browser renders on (matches the entrypoint).
+  display: ":99"
+
+# Bulk Scan concurrency — how many URLs scan in parallel.
+# Each parallel scan runs its own headed Chrome, so this is bound by RAM/CPU,
+# NOT by a code limit: pushing it too high causes OOM/timeouts and SLOWER scans,
+# and more simultaneous CAPTCHA gates contend for the single solver display.
+# Tune to your host; the app hard-caps it at 8.
+bulk:
+  max_concurrent: 5
+
 scoring:
   weights:
     # Analyzer weights are now validated and must sum to 100.

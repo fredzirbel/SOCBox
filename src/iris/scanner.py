@@ -17,7 +17,9 @@ from iris.browser import (
     launch_browser,
     reset_solved_state,
     set_action_notifier,
+    set_human_present,
     set_interactive_mode,
+    set_solve_timeout_ms,
 )
 from iris.classification import classify
 from iris.dns_util import compute_host_resolver_rule
@@ -221,6 +223,7 @@ def scan_url(
     screenshot_dir: str = "",
     on_event: EventCallback = None,
     interactive: bool = False,
+    human_present: bool = False,
 ) -> ScanReport:
     """Run all analyzers against the URL and produce a ScanReport.
 
@@ -239,19 +242,28 @@ def scan_url(
         screenshot_dir: Directory to save screenshots. Empty string disables.
         on_event: Optional callback for streaming events (SSE).
         interactive: If True, run the browser on-screen and pause on an
-            unsolvable CAPTCHA so the operator can solve it by hand. Intended
-            for local / CLI single-scan use, not the concurrent web server.
+            unsolvable CAPTCHA so the operator can solve it by hand. CLI /
+            local single-scan use.
+        human_present: If True, an analyst is watching this scan in the web UI
+            and can solve an un-automatable CAPTCHA live via the noVNC takeover.
+            Set only for single interactive web scans — never for bulk, agent,
+            or async scans, which must not block on a human.
 
     Returns:
         A completed ScanReport with scores and findings.
     """
-    # Human-in-the-loop CAPTCHA solving is a process-global browser behaviour;
-    # set it to match this scan's request. Reset any solved-CAPTCHA state from a
+    # These browser behaviours are thread-local, set per scan (the scan's
+    # browser work runs on this thread). Reset any solved-CAPTCHA state from a
     # previous scan so cookies never leak across URLs.
     set_interactive_mode(interactive)
+    set_human_present(human_present)
+    set_solve_timeout_ms(
+        config.get("interactive", {}).get("session_timeout_ms", 180_000)
+    )
     reset_solved_state()
     # Emit "action_required" to the stream when a scan hits a CAPTCHA gate, so
-    # the web UI can desktop-notify the analyst. No-op for headless/agent scans.
+    # the web UI can desktop-notify the analyst + open the live solver. No-op
+    # for headless/agent scans.
     set_action_notifier(
         (lambda info: _emit(on_event, "action_required", info)) if on_event else None
     )

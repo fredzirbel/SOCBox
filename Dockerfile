@@ -10,6 +10,8 @@ FROM python:3.11-slim AS base
 # ── System packages ──────────────────────────────────────────────────────────
 # - wget/gnupg/curl: needed to add Google Chrome apt repo
 # - xvfb: virtual framebuffer so headed Chrome can run without a real display
+# - x11vnc/novnc/websockify: export the display so analysts can solve CAPTCHAs
+#   live in the browser (transparent noVNC takeover)
 # - fonts-liberation/libnss3/etc: Chrome runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
         wget \
@@ -18,6 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         xvfb \
         xauth \
+        x11vnc \
+        novnc \
+        websockify \
         fonts-liberation \
         libasound2 \
         libatk-bridge2.0-0 \
@@ -63,11 +68,12 @@ COPY . .
 # ── Screenshot output directory ──────────────────────────────────────────────
 RUN mkdir -p /app/screenshots
 
-# ── Expose the web UI port ───────────────────────────────────────────────────
+# ── Expose the web UI + noVNC ports ──────────────────────────────────────────
 EXPOSE 8000
+EXPOSE 6080
 
-# ── Run with Xvfb so headed Chrome has a virtual display ─────────────────────
-# Shell form is required here so xvfb-run receives the full command as a single
-# string and passes it correctly to the shell.
-CMD xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-    python -m iris.web.app --no-reload
+# ── Entrypoint: fixed Xvfb display + x11vnc + noVNC, then the app ────────────
+# Replaces the old `xvfb-run --auto-servernum` so the display number is fixed
+# and x11vnc can attach deterministically for the live CAPTCHA-solve takeover.
+RUN chmod +x /app/entrypoint.sh
+CMD ["bash", "/app/entrypoint.sh"]

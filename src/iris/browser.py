@@ -16,6 +16,7 @@ Key features:
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import logging
 import random
@@ -27,6 +28,7 @@ from playwright.sync_api import (
     BrowserContext,
     Page,
     Playwright,
+    sync_playwright,
 )
 from playwright.sync_api import (
     TimeoutError as PlaywrightTimeout,
@@ -106,15 +108,79 @@ _VIEWPORT_HEIGHT = 720
 # resumes when the operator presses Enter (or, with no terminal, when a solved
 # response token is detected).
 #
-# This is process-global on purpose: it is meant for local / CLI, single-scan
-# use where one human is watching one browser. It is NOT for the concurrent
-# web server (a remote user cannot click a server-side browser — that needs
-# remote browser streaming, e.g. noVNC).
-_INTERACTIVE_MODE = False
+# Control state is **thread-local**, set per scan. Each scan runs its browser
+# work on a single thread (the scanner drives browser analyzers + screenshots
+# sequentially on the scan thread), so per-thread keying keeps concurrent scans
+# isolated: an interactive / human-present scan never makes a sibling headless
+# scan pause, and the action-notifier no longer races across concurrent web
+# scans. Two solve modes exist:
+#   - interactive: CLI, headed on-screen, operator solves locally (Enter/token).
+#   - human_present: web UI, transparent noVNC takeover (see remote_takeover_solve).
+_scan_tls = threading.local()
 
 # How long to wait (no-terminal fallback) for a solved token before giving up.
 _CAPTCHA_SOLVE_TIMEOUT_MS = 180_000  # 3 minutes
 _CAPTCHA_POLL_MS = 1000
+
+
+def set_interactive_mode(enabled: bool) -> None:
+    """Enable CLI human-in-the-loop solving (headed, on-screen) for this thread."""
+    _scan_tls.interactive = enabled
+
+
+def set_human_present(enabled: bool) -> None:
+    """Mark whether an analyst is watching this scan and can solve a CAPTCHA live.
+
+    True only for single, analyst-initiated web-UI scans (transparent noVNC
+    takeover). False for bulk, agent/TAP, and async scans, which must never
+    block on a human.
+    """
+    _scan_tls.human_present = enabled
+
+
+def set_action_notifier(notifier) -> None:
+    """Register (or clear with None) the per-scan analyst-action notifier.
+
+    The notifier fires when a scan hits a CAPTCHA gate; the web layer turns it
+    into an ``action_required`` SSE event (and enriches it with the noVNC
+    ``view_url``). Signature: ``notifier(info: dict) -> None``.
+    """
+    _scan_tls.action_notifier = notifier
+
+
+def set_solve_timeout_ms(ms: int) -> None:
+    """Set the per-scan manual-solve timeout in milliseconds (thread-local)."""
+    _scan_tls.solve_timeout_ms = ms
+
+
+def _interactive_mode() -> bool:
+    return getattr(_scan_tls, "interactive", False)
+
+
+def _human_present() -> bool:
+    return getattr(_scan_tls, "human_present", False)
+
+
+def _get_action_notifier():
+    return getattr(_scan_tls, "action_notifier", None)
+
+
+def _solve_timeout_ms() -> int:
+    return getattr(_scan_tls, "solve_timeout_ms", _CAPTCHA_SOLVE_TIMEOUT_MS)
+
+
+def is_human_present() -> bool:
+    """Public: True if an analyst is watching this scan and can solve a CAPTCHA live."""
+    return _human_present()
+
+
+def get_solved_state() -> dict | None:
+    """Return the clearance state captured after a CAPTCHA solve this scan, if any.
+
+    Analyzers that build their own browser context (e.g. the download fallback)
+    can replay this so a gate solved earlier in the scan stays unlocked.
+    """
+    return getattr(_ctx_tls, "solved_state", None)
 
 # Visible-iframe src signatures for CAPTCHA widgets. Includes the always-present
 # anchor/checkbox frame (so a plain "I'm not a robot" gate pauses too), not just
@@ -156,28 +222,6 @@ def _stash_solved_state(page: Page) -> None:
         logger.debug("Captured post-solve storage state for reuse this scan")
     except Exception as exc:
         logger.debug("Could not capture post-solve storage state: %s", exc)
-
-
-# Optional callback fired when a scan hits a CAPTCHA gate (set per-scan by the
-# scanner so the web stream can emit an "action_required" SSE event). Signature:
-# notifier(info: dict) -> None.
-_action_notifier = None
-
-
-def set_action_notifier(notifier) -> None:
-    """Register (or clear with None) the per-scan analyst-action notifier."""
-    global _action_notifier
-    _action_notifier = notifier
-
-
-def set_interactive_mode(enabled: bool) -> None:
-    """Enable or disable human-in-the-loop CAPTCHA solving (process-global).
-
-    Args:
-        enabled: True to pause on unsolvable CAPTCHAs for manual solving.
-    """
-    global _INTERACTIVE_MODE
-    _INTERACTIVE_MODE = enabled
 
 
 def detect_interactive_captcha(page: Page) -> str:
@@ -241,14 +285,37 @@ def _captcha_token_present(page: Page) -> bool:
         return False
 
 
+def _poll_for_solve(page: Page, timeout_ms: int) -> bool:
+    """Poll for a solved-CAPTCHA response token until *timeout_ms* elapses.
+
+    The terminal-free resume signal shared by the CLI no-TTY path and the web
+    noVNC takeover: a populated response-token field means the challenge was
+    solved (the widget itself stays on the page). Does not stash state.
+
+    Args:
+        page: The Playwright page showing the challenge.
+        timeout_ms: How long to wait before giving up.
+
+    Returns:
+        True if a solved token appeared, False on timeout.
+    """
+    elapsed = 0
+    while elapsed < timeout_ms:
+        if _captcha_token_present(page):
+            return True
+        page.wait_for_timeout(_CAPTCHA_POLL_MS)
+        elapsed += _CAPTCHA_POLL_MS
+    return False
+
+
 def wait_for_manual_captcha_solve(page: Page, provider: str) -> bool:
     """Pause the scan while the operator solves a CAPTCHA in the browser window.
 
-    With an interactive terminal, blocks until the operator presses Enter —
-    reliable across every CAPTCHA type (the checkbox widget stays on the page
-    after solving, so waiting for it to "disappear" does not work). Without a
-    terminal (e.g. automation), falls back to polling for a solved response
-    token until the timeout elapses.
+    CLI path. With an interactive terminal, blocks until the operator presses
+    Enter — reliable across every CAPTCHA type (the checkbox widget stays on the
+    page after solving, so waiting for it to "disappear" does not work). Without
+    a terminal, falls back to polling for a solved response token. The web UI
+    uses ``remote_takeover_solve`` instead, never this function's TTY branch.
 
     Args:
         page: The Playwright page showing the challenge.
@@ -280,19 +347,146 @@ def wait_for_manual_captcha_solve(page: Page, provider: str) -> bool:
         f"solved token…",
         flush=True,
     )
-    elapsed = 0
-    while elapsed < _CAPTCHA_SOLVE_TIMEOUT_MS:
-        if _captcha_token_present(page):
-            logger.info("Solved CAPTCHA token detected — resuming")
-            _stash_solved_state(page)
-            print("[IRIS] CAPTCHA solved — resuming analysis.\n", flush=True)
-            return True
-        page.wait_for_timeout(_CAPTCHA_POLL_MS)
-        elapsed += _CAPTCHA_POLL_MS
+    if _poll_for_solve(page, _CAPTCHA_SOLVE_TIMEOUT_MS):
+        logger.info("Solved CAPTCHA token detected — resuming")
+        _stash_solved_state(page)
+        print("[IRIS] CAPTCHA solved — resuming analysis.\n", flush=True)
+        return True
 
     logger.warning("CAPTCHA not solved within %ds — continuing", timeout_s)
     print("[IRIS] Timed out waiting for CAPTCHA — continuing analysis.\n", flush=True)
     return False
+
+
+# ---------------------------------------------------------------------------
+# Transparent web takeover (noVNC)
+# ---------------------------------------------------------------------------
+# When a single analyst-initiated web scan (human_present) hits an
+# un-automatable CAPTCHA, the headless scan hands the gate off to a headed
+# browser on the shared X display (visible via noVNC) so the analyst can solve
+# it in their tab. The headed solve runs on a dedicated single worker thread:
+# Playwright's sync API is thread-bound, so creating/driving the headed browser
+# on one thread is required, and a single worker also serializes takeovers on
+# the one shared display. The headless scan thread blocks on the result (it is
+# waiting for a human anyway), then replays the captured clearance.
+_takeover_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="iris-takeover",
+)
+
+
+def _takeover_job(
+    url: str, provider: str, session_state: dict | None, timeout_ms: int,
+) -> dict | None:
+    """Run a headed solve on the shared display; return clearance state or None.
+
+    Runs on the dedicated takeover thread. Launches a headed browser on the X
+    display, replays the scan's session so the gate matches, waits for the
+    analyst to solve, and returns the post-solve ``storage_state``.
+    """
+    pw = None
+    browser = None
+    try:
+        pw = sync_playwright().start()
+        browser = launch_browser(pw, url, interactive=True)
+
+        kwargs: dict = {
+            # Let the page fill the maximized window so the analyst sees a large
+            # browser in the noVNC viewer (rather than a small fixed viewport).
+            "no_viewport": True,
+            "ignore_https_errors": True,
+            "user_agent": USER_AGENT,
+            "locale": "en-US",
+            "timezone_id": "America/New_York",
+        }
+        if session_state:
+            kwargs["storage_state"] = session_state
+
+        context = browser.new_context(**kwargs)
+        context.add_init_script(_INIT_SCRIPT)
+        page = context.new_page()
+
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        except Exception as exc:
+            logger.warning("Takeover navigation failed for %s: %s", url, exc)
+            return None
+
+        logger.info("Takeover: awaiting analyst solve of %s on %s", provider, url)
+        if not _poll_for_solve(page, timeout_ms):
+            logger.warning("Takeover solve timed out for %s", url)
+            return None
+
+        try:
+            return context.storage_state()
+        except Exception as exc:
+            logger.debug("Takeover storage_state capture failed: %s", exc)
+            return None
+    finally:
+        if browser is not None:
+            try:
+                browser.close()
+            except Exception:
+                pass
+        if pw is not None:
+            try:
+                pw.stop()
+            except Exception:
+                pass
+
+
+def remote_takeover_solve(
+    page: Page, url: str, provider: str, timeout_ms: int,
+) -> bool:
+    """Hand a CAPTCHA off to a headed noVNC session for an analyst to solve.
+
+    Called from the headless scan thread when an analyst is present. Captures
+    the scan's current session, runs the headed solve on the dedicated takeover
+    thread (serialized on the shared display), and on success stashes the
+    clearance for this scan to replay across its later navigations.
+
+    Args:
+        page: The headless scan page that hit the gate.
+        url: The gated URL.
+        provider: Detected CAPTCHA provider (for logging).
+        timeout_ms: How long to wait for the analyst.
+
+    Returns:
+        True if the analyst solved the challenge.
+    """
+    session_state = None
+    try:
+        session_state = page.context.storage_state()
+    except Exception as exc:
+        logger.debug("Could not capture scan session for takeover: %s", exc)
+
+    future = _takeover_executor.submit(
+        _takeover_job, url, provider, session_state, timeout_ms,
+    )
+    try:
+        solved_state = future.result(timeout=(timeout_ms / 1000) + 60)
+    except Exception as exc:
+        logger.warning("Takeover solve failed for %s: %s", url, exc)
+        return False
+
+    if solved_state:
+        _ctx_tls.solved_state = solved_state
+        logger.info("Takeover solved — clearance captured for %s", url)
+        return True
+    return False
+
+
+def _replay_clearance_and_reload(page: Page, url: str) -> None:
+    """Inject the just-solved clearance into the live page and reload past the gate."""
+    state = getattr(_ctx_tls, "solved_state", None)
+    if not state:
+        return
+    try:
+        cookies = state.get("cookies", []) if isinstance(state, dict) else []
+        if cookies:
+            page.context.add_cookies(cookies)
+        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    except Exception as exc:
+        logger.debug("Clearance replay/reload failed for %s: %s", url, exc)
 
 
 def launch_browser(pw: Playwright, url: str, *, interactive: bool = False) -> Browser:
@@ -321,6 +515,16 @@ def launch_browser(pw: Playwright, url: str, *, interactive: bool = False) -> Br
         "--disable-client-side-phishing-detection",
         "--safebrowsing-disable-download-protection",
     ])
+
+    if interactive:
+        # Fill the virtual display so the live noVNC viewer shows a large,
+        # easy-to-read browser. The container has no window manager, so set the
+        # geometry explicitly rather than relying on --start-maximized alone.
+        base_args.extend([
+            "--window-position=0,0",
+            "--window-size=1920,1080",
+            "--start-maximized",
+        ])
 
     # Off-screen unless the operator needs to see and click the window.
     chrome_args = list(base_args)
@@ -358,9 +562,10 @@ def launch_browser(pw: Playwright, url: str, *, interactive: bool = False) -> Br
 def create_context(browser: Browser) -> BrowserContext:
     """Create a browser context with anti-fingerprinting protections.
 
-    In interactive mode, if the operator has already solved a CAPTCHA earlier
-    in this scan, the captured clearance cookies are replayed into the new
-    context so the same challenge is not presented again on later navigations.
+    If a CAPTCHA was already solved earlier in this scan — whether by the CLI
+    operator or via the web noVNC takeover — the captured clearance cookies are
+    replayed into the new context so the same challenge is not presented again
+    on later navigations.
 
     Args:
         browser: A launched Browser instance.
@@ -376,10 +581,9 @@ def create_context(browser: Browser) -> BrowserContext:
         "timezone_id": "America/New_York",
     }
 
-    if _INTERACTIVE_MODE:
-        solved_state = getattr(_ctx_tls, "solved_state", None)
-        if solved_state is not None:
-            kwargs["storage_state"] = solved_state
+    solved_state = getattr(_ctx_tls, "solved_state", None)
+    if solved_state is not None:
+        kwargs["storage_state"] = solved_state
 
     context = browser.new_context(**kwargs)
     context.add_init_script(_INIT_SCRIPT)
@@ -464,19 +668,26 @@ def navigate_with_bypass(
 
     # Detect an interactive CAPTCHA gate (for analyst notification and/or solve).
     provider = ""
-    if _INTERACTIVE_MODE or _action_notifier is not None:
+    notifier = _get_action_notifier()
+    if _interactive_mode() or _human_present() or notifier is not None:
         provider = detect_interactive_captcha(page)
 
-    # Signal that a human is needed (web UI turns this into a desktop notification).
-    if provider and _action_notifier is not None:
+    # Signal that a human is needed: the web layer turns this into an
+    # action_required SSE event (desktop notification + noVNC view_url).
+    if provider and notifier is not None:
         try:
-            _action_notifier({"kind": "captcha", "provider": provider, "url": url})
+            notifier({"kind": "captcha", "provider": provider, "url": url})
         except Exception as exc:
             logger.debug("Action notifier failed: %s", exc)
 
-    # Human-in-the-loop: pause for an on-screen solve when interactive mode is on.
-    if provider and _INTERACTIVE_MODE:
+    # Resolve the gate. CLI: pause for an on-screen solve. Web (human present):
+    # hand off to a headed noVNC session, then replay clearance past the gate.
+    # Bulk / agent / async scans (no interactive, no human) just notified above.
+    if provider and _interactive_mode():
         wait_for_manual_captcha_solve(page, provider)
+    elif provider and _human_present():
+        if remote_takeover_solve(page, url, provider, _solve_timeout_ms()):
+            _replay_clearance_and_reload(page, url)
 
     return status
 

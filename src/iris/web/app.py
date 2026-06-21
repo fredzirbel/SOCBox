@@ -7,8 +7,10 @@ import json
 import logging
 import os
 import re
+import secrets
 import tempfile
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -16,6 +18,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import requests as http_requests
 import tldextract
@@ -40,13 +43,24 @@ _PROJECT_ROOT = _WEB_DIR.parent.parent.parent
 _SCREENSHOT_DIR = _PROJECT_ROOT / "screenshots"
 
 # ---------------------------------------------------------------------------
+# Configuration (loaded once at startup)
+# ---------------------------------------------------------------------------
+_config: dict[str, Any] = load_config()
+
+# ---------------------------------------------------------------------------
 # Dedicated scan executor (bounded worker pool)
 # ---------------------------------------------------------------------------
-# Each worker thread gets its own persistent Playwright browser via
-# thread-local storage (see scanner._get_browser).  This allows
-# concurrent scans while respecting Playwright's greenlet-bound API.
+# Each worker thread gets its own persistent (headed Chrome) Playwright browser
+# via thread-local storage (see scanner._get_browser). This allows concurrent
+# scans while respecting Playwright's greenlet-bound API. Concurrency is tunable
+# via bulk.max_concurrent but HARD-CAPPED: each parallel scan is a full Chrome,
+# so unbounded concurrency exhausts RAM/CPU (OOM, timeouts) rather than going
+# faster. See the bulk-concurrency notes in config/default.yaml.
+_MAX_CONCURRENT_SCANS = max(
+    1, min(8, int(_config.get("bulk", {}).get("max_concurrent", 5) or 5))
+)
 _scan_executor = ThreadPoolExecutor(
-    max_workers=3, thread_name_prefix="iris-scan",
+    max_workers=_MAX_CONCURRENT_SCANS, thread_name_prefix="iris-scan",
 )
 
 # ---------------------------------------------------------------------------
@@ -417,11 +431,6 @@ def _save_bulk_cache() -> None:
 _load_cache()
 _load_bulk_cache()
 
-# ---------------------------------------------------------------------------
-# Configuration (loaded once at startup)
-# ---------------------------------------------------------------------------
-_config: dict[str, Any] = load_config()
-
 
 def _resolve_ip(url: str) -> str:
     """Attempt to resolve the domain in *url* to an IP address.
@@ -445,6 +454,48 @@ def _resolve_ip(url: str) -> str:
 # ---------------------------------------------------------------------------
 # Maps scan_id -> asyncio.Queue of (event_type, data) tuples for active scans.
 _active_streams: dict[str, asyncio.Queue] = {}
+
+# ---------------------------------------------------------------------------
+# Transparent CAPTCHA-solve (noVNC) session tokens
+# ---------------------------------------------------------------------------
+# A short-lived token is minted when a human-present scan hits a CAPTCHA gate and
+# embedded in the view_url, so the live-browser viewer is only reachable while a
+# takeover is active. SECURITY: this is a v1 guard only — the noVNC endpoint MUST
+# sit behind API auth / SSO (item #6) or a VPN before any network exposure.
+_takeover_tokens: dict[str, float] = {}  # token -> expiry (epoch seconds)
+_takeover_tokens_lock = threading.Lock()
+
+
+def _issue_takeover_token(ttl_seconds: float) -> str:
+    """Mint a single-use-ish session token valid for *ttl_seconds*."""
+    token = secrets.token_urlsafe(24)
+    with _takeover_tokens_lock:
+        _takeover_tokens[token] = time.time() + ttl_seconds
+    return token
+
+
+def _validate_takeover_token(token: str) -> bool:
+    """Return True if *token* is known and unexpired (pruning expired ones)."""
+    if not token:
+        return False
+    now = time.time()
+    with _takeover_tokens_lock:
+        for t, exp in list(_takeover_tokens.items()):
+            if exp < now:
+                _takeover_tokens.pop(t, None)
+        return token in _takeover_tokens
+
+
+def _build_view_url(token: str) -> str:
+    """Build the noVNC viewer URL for *token* from interactive config."""
+    cfg = _config.get("interactive", {})
+    base = cfg.get("novnc_public_url") or "http://localhost:6080/vnc.html"
+    params = f"autoconnect=true&resize=scale&reconnect=true&token={token}"
+    password = cfg.get("vnc_password") or ""
+    if password:
+        params += f"&password={quote(password)}"
+    sep = "&" if "?" in base else "?"
+    return f"{base}{sep}{params}"
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -544,6 +595,14 @@ async def api_scan(request: Request) -> JSONResponse:
     if not url.startswith(("http://", "https://")):
         url = f"https://{url}"
 
+    # An analyst can solve an un-automatable CAPTCHA live only when the
+    # feature is enabled AND this is a single interactive web scan (the UI
+    # passes human_present). Bulk / agent / async scans omit it and never block.
+    human_present = bool(body.get("human_present")) and bool(
+        _config.get("interactive", {}).get("enabled", False)
+    )
+    solve_ttl = _config.get("interactive", {}).get("session_timeout_ms", 180_000) / 1000 + 60
+
     scan_id = uuid.uuid4().hex[:12]
 
     # Resolve metadata early (fast, <1s)
@@ -559,7 +618,15 @@ async def api_scan(request: Request) -> JSONResponse:
     loop = asyncio.get_event_loop()
 
     def on_event(event_type: str, data: dict) -> None:
-        """Thread-safe callback that puts events on the async queue."""
+        """Thread-safe callback that puts events on the async queue.
+
+        For a human-present scan, an ``action_required`` (CAPTCHA gate) event is
+        enriched with a tokenised noVNC ``view_url`` so the UI can open the live
+        solver pointed at the takeover session.
+        """
+        if event_type == "action_required" and human_present:
+            token = _issue_takeover_token(solve_ttl)
+            data = {**data, "view_url": _build_view_url(token)}
         loop.call_soon_threadsafe(event_queue.put_nowait, (event_type, data))
 
     def run_scan() -> None:
@@ -580,6 +647,7 @@ async def api_scan(request: Request) -> JSONResponse:
                 passive_only=False,
                 screenshot_dir=str(_SCREENSHOT_DIR),
                 on_event=on_event,
+                human_present=human_present,
             )
 
             report.resolved_ip = ip
@@ -678,6 +746,17 @@ async def stream(scan_id: str) -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.get("/api/takeover/validate")
+async def takeover_validate(request: Request) -> JSONResponse:
+    """Validate a noVNC session token.
+
+    Used to gate access to the live-browser viewer (and as the hook a
+    websockify token-plugin can call). Returns ``{"valid": bool}``.
+    """
+    token = request.query_params.get("token", "")
+    return JSONResponse({"valid": _validate_takeover_token(token)})
 
 
 @app.get("/results/{scan_id}", response_class=HTMLResponse)
@@ -1523,6 +1602,7 @@ async def bulk_page(request: Request) -> HTMLResponse:
         "bulk.html",
         {
             "bulk_restore": bulk_data or "null",
+            "max_concurrent": _MAX_CONCURRENT_SCANS,
         },
     )
 

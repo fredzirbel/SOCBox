@@ -9,6 +9,7 @@ import requests
 import tldextract
 
 from iris.analyzers.base import BaseAnalyzer
+from iris.dns_util import request_with_doh_fallback
 from iris.models import AnalyzerResult, AnalyzerStatus, Finding
 
 
@@ -87,8 +88,10 @@ class HTTPResponseAnalyzer(BaseAnalyzer):
         try:
             session = requests.Session()
             session.max_redirects = max_redirects
-            response = session.get(
+            response = request_with_doh_fallback(
+                "GET",
                 url,
+                session=session,
                 headers={"User-Agent": user_agent},
                 timeout=timeout,
                 verify=verify_ssl,

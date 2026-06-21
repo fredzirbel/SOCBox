@@ -20,9 +20,11 @@ disposition.
 ## Run it
 - **Container (primary):** `docker compose up --build -d` → **http://localhost:8080**
   (host 8080 → container 8000; **8000 is unusable** — it's in a Windows/WinNAT reserved
-  range 7908–8007). `restart: unless-stopped`.
+  range 7908–8007). `restart: unless-stopped`. Also publishes **6080** (noVNC live-browser
+  viewer for in-browser CAPTCHA solving; set `VNC_PASSWORD`).
 - **Dev server:** `IRIS_PORT=8015 .venv/Scripts/python.exe -m iris.web.app --no-reload`
-- **Tests/lint:** `.venv/Scripts/python.exe -m pytest -q` (48 passing) · `... -m ruff check src tests`
+  (no noVNC/Xvfb — the live-solver takeover needs the container entrypoint).
+- **Tests/lint:** `.venv/Scripts/python.exe -m pytest -q` (62 passing) · `... -m ruff check src tests`
 - **CLI:** `iris <url>` · `iris <url> -i` (interactive CAPTCHA) · `python -m iris.feeds_import ...`
 
 ## Environment quirks (important)
@@ -42,9 +44,19 @@ disposition.
   page_content, link_discovery, download, threat_feeds). `page_content` also stashes
   `page_text` + scripts for classification.
 - `src/iris/feeds/` — VirusTotal, AbuseIPDB, Google Safe Browsing.
-- `src/iris/browser.py` — Playwright launch, Cloudflare bypass, **interactive CAPTCHA
-  solve**, human-like behavior, `detect_interactive_captcha`, `set_action_notifier`,
-  per-URL DNS via `--host-resolver-rules` (DoH fallback — **browser only**).
+- `src/iris/browser.py` — Playwright launch, Cloudflare bypass, **CAPTCHA solving**, human-like
+  behavior, per-URL DNS via `--host-resolver-rules` (uses the DoH fallback in `dns_util`).
+  Control state (`interactive` / `human_present` / `action_notifier` / solve timeout) is
+  **thread-local, set per scan** (`set_*` fns) so concurrent scans don't interfere. Two solve
+  modes: CLI inline (`wait_for_manual_captcha_solve`) and **web transparent takeover**
+  (`remote_takeover_solve` → dedicated single-thread headed browser on the X display → noVNC;
+  serialized on one display). Clearance is captured once and replayed across the scan
+  (`_stash_solved_state`/`_ctx_tls.solved_state`, replayed by `create_context`).
+- `src/iris/dns_util.py` — DoH resolution (`resolve_host`/`resolve_hostname`), Chromium
+  `--host-resolver-rules` helpers, and `request_with_doh_fallback` — a thread-safe DoH
+  retry wrapper for the **requests-based** analyzers (thread-local getaddrinfo override on
+  a DNS-class `ConnectionError`; preserves SNI/TLS/redirects). Used by HTTP, download, and
+  threat-feed IP resolution.
 - `src/iris/scoring.py` — `calculate_score` + `_composite_parts` (shared math) +
   `score_breakdown` (per-analyzer contributions; 45% analyzers / 55% feeds blend + VT floor).
 - `src/iris/classification.py` — rule-based ATT&CK technique tagging.
@@ -56,6 +68,9 @@ disposition.
 - `src/iris/web/templates/results.html` — **TWO render paths that must stay in sync**:
   streaming (`{% if streaming %}`, JS/SSE) and static (`{% else %}`, server-rendered Jinja).
 - Shared UI handlers (lightbox, copy-link, copy-url, disposition buttons) live in `base.html`.
+- **Desktop notifications** (Web Notifications API): CAPTCHA `action_required` gates, plus
+  scan-complete (single) and batch-complete (Bulk, with malicious/error counts). All fire
+  only when `document.hidden` (analyst tabbed away) so they never interrupt active viewing.
 
 ## v1 TAP API (the SlashNext replacement — agent/SOAR-callable)
 All return `final_url`. Accept `{"url":...}` (runs a scan) or `?scan_id=` (reuses one).
@@ -68,11 +83,30 @@ All return `final_url`. Accept `{"url":...}` (runs a scan) or `?scan_id=` (reuse
 - `POST /api/v1/scan/async` — `{url, callback_url?}` → `{job_id}`; POSTs result to callback on done
 - `GET /api/v1/scan/{job_id}` — poll async job
 - `GET /api/feeds/import?source=urlhaus|openphish&limit=&tag=` — live URLs for Bulk Scan
+- `GET /api/takeover/validate?token=` — noVNC session-token check (live-solver guard / websockify hook)
+
+## Transparent in-browser CAPTCHA solving (#2)
+- A single analyst-initiated **web** scan (`/api/scan` with `human_present:true` — the index
+  single-scan form sets it) that hits an un-automatable CAPTCHA pauses and surfaces the **live
+  detonation browser** in the analyst's tab via **self-hosted noVNC**; the scan resumes
+  automatically once solved. **Bulk / agent (TAP) / async scans never block on a human.**
+- Handoff: the headless scan hands the gate to a headed browser on the X display (dedicated
+  single takeover thread → serialized on one display), replaying the scan's session; on solve
+  it captures clearance and the headless scan reloads past the gate + replays it onward.
+- Infra: container entrypoint (`entrypoint.sh`) runs `Xvfb :99` + `x11vnc -localhost` +
+  `websockify`/noVNC on **6080**. Trigger is *presence* (no checkbox); covers CAPTCHA
+  challenges (CTA "Continue/Download" gates are already auto-clicked).
+- ⚠️ **Security:** the noVNC viewer is a controllable browser on malicious pages. v1 guard =
+  `VNC_PASSWORD` (x11vnc) + a one-time `view_url` session token. It **MUST sit behind #6 API
+  auth/SSO or a VPN before any network exposure.** `VNC_PASSWORD` (compose env) must match
+  `interactive.vnc_password` (local.yaml).
 
 ## Config & secrets
 - `config/default.yaml` (committed, empty slots) / `config/local.yaml` (**gitignored**, real keys).
 - Keys present in local.yaml: virustotal, google_safebrowsing, abuseipdb, **urlhaus**.
 - `notifications.webhook_url` (+ `webhook_timeout`) for async completion webhooks.
+- `interactive.*` — enable flag, `novnc_public_url`, `vnc_password`, `session_timeout_ms`,
+  `display` for the in-browser CAPTCHA solver (default **disabled**).
 - ⚠️ **Rotate the URLhaus key** — it was pasted into a chat transcript.
 
 ## Done this session (all on `main`)
@@ -100,11 +134,24 @@ All return `final_url`. Accept `{"url":...}` (runs a scan) or `?scan_id=` (reuse
 ## Open / pending (next-session candidates, roughly prioritized)
 - **#6 API auth** — every `/api/*` endpoint is currently **unauthenticated** (service tokens
   for the agent + SSO for the UI). Needed before exposing to the agent on the network.
-- **DNS robustness** (diagnosed but not fixed): transient *container* DNS failures errored
-  3 bulk rows. Quick win: add `dns: [1.1.1.1, 8.8.8.8]` to the `iris` service in
-  `docker-compose.yml`. Medium: route the requests-based analyzers (HTTP/feeds/WHOIS/
-  download) through the DoH fallback (currently DoH only covers the browser). Bulk: retry
-  once on SSE error before marking a row ERROR.
+  **Now also gates the noVNC live-solver (6080)** — hard dependency before exposing #2.
+- **#2 in-browser CAPTCHA solve** ✅ **v1 DONE + Docker-verified** (see section above):
+  transparent noVNC takeover, behind `interactive.enabled`. Verified end-to-end in the
+  container — scanning the reCAPTCHA demo with `human_present` fired `action_required` +
+  `view_url`, and the headed takeover browser rendered the live reCAPTCHA on display `:99`
+  (confirmed by screenshotting the Xvfb display). Entrypoint now clears stale X locks so
+  `docker restart` / `restart:unless-stopped` doesn't crash-loop. Remaining: the **human
+  solve → resume → post-gate analysis** leg is inherently manual (analyst clicks the
+  checkbox); per-provider tuning of the clearance "replay + reload"; a **multi-display
+  pool** for concurrent takeovers (v1 serializes on one).
+- Optional follow-up: **surface + reclassify the post-click landing page** (feed `cta_url`
+  into `final_url` + reclassification + screenshot TAP) — complementary to #2, not yet done.
+- ~~**DNS robustness**~~ ✅ **DONE** (all three): `dns: [1.1.1.1, 8.8.8.8]` on the `iris`
+  service; requests-based analyzers (HTTP/download + threat-feed IP resolution) now retry
+  through `request_with_doh_fallback`; Bulk Scan retries a row once (1.2s backoff, reusing
+  the concurrency slot) before marking it ERROR. WHOIS/DNS keeps its native resolver — its
+  "does not resolve" finding is an intentional signal — and is covered by the compose `dns:`
+  resolvers at the system-resolver level. 6 new unit tests (`test_dns_doh_fallback.py`).
 - Bulk "Import from feed" button is **online-only**; expose the `--all`/offline toggle in the UI.
 - Decide whether a **critical classification** (e.g. ClickFix) should nudge the verdict
   (currently orthogonal by design).

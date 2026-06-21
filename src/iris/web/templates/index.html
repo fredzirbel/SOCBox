@@ -76,7 +76,9 @@
         fetch("/api/scan", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({url: url}),
+            /* human_present: a single analyst is watching this scan, so if it
+               hits an un-automatable CAPTCHA the live noVNC solver can open. */
+            body: JSON.stringify({url: url, human_present: true}),
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {

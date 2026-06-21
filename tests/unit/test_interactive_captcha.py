@@ -169,17 +169,37 @@ def test_create_context_replays_solved_state_when_interactive(monkeypatch) -> No
     }
 
 
-def test_create_context_ignores_solved_state_when_not_interactive() -> None:
+def test_create_context_replays_solved_state_without_interactive() -> None:
+    """Clearance is replayed whenever it exists, not only in CLI interactive mode.
+
+    The web noVNC takeover solves a CAPTCHA on a separate headed session and
+    stashes the clearance for the *headless* scan to reuse — so replay must not
+    be gated on interactive mode. Cross-scan isolation comes from
+    reset_solved_state() at scan start, not from the interactive flag.
+    """
     browser.set_interactive_mode(False)
+    browser.set_human_present(True)
     browser._ctx_tls.solved_state = {"cookies": [{"name": "cf_clearance"}]}
     try:
         b = _CtxBrowser()
         browser.create_context(b)
     finally:
+        browser.set_human_present(False)
         browser.reset_solved_state()
 
+    assert b.context_kwargs[0].get("storage_state") == {
+        "cookies": [{"name": "cf_clearance"}]
+    }
+
+
+def test_create_context_no_replay_without_solved_state() -> None:
+    """With no stashed clearance (normal scan), nothing is replayed."""
+    browser.set_interactive_mode(False)
+    browser.reset_solved_state()
+    b = _CtxBrowser()
+    browser.create_context(b)
     assert "storage_state" not in b.context_kwargs[0], (
-        "normal scans must stay isolated — no cookie replay"
+        "a scan with no solved CAPTCHA must not replay any storage state"
     )
 
 

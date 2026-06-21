@@ -14,6 +14,9 @@ from __future__ import annotations
 
 import logging
 import socket
+import threading
+from contextlib import contextmanager
+from typing import Any, Iterator
 from urllib.parse import urlparse
 
 import requests
@@ -21,31 +24,22 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-def resolve_hostname(url: str) -> str:
-    """Resolve the hostname in *url* to an IPv4 address.
+def _resolve_via_doh(hostname: str) -> str:
+    """Resolve *hostname* to an IPv4 address using public DoH endpoints.
 
-    Tries the system resolver first, then falls back to Cloudflare and
-    Google public DoH endpoints.
+    Queries Cloudflare then Google DNS-over-HTTPS, bypassing the system
+    resolver entirely.  This is the fallback path for hosts the local
+    resolver cannot (or refuses to) resolve.
 
     Args:
-        url: A full URL (e.g. ``https://example.com/path``).
+        hostname: A bare hostname (e.g. ``example.com``).
 
     Returns:
-        The resolved IPv4 address, or an empty string on failure.
+        The first A record found, or an empty string on failure.
     """
-    hostname = urlparse(url).hostname or ""
     if not hostname:
         return ""
 
-    # 1. Try the system resolver
-    try:
-        ip = socket.gethostbyname(hostname)
-        logger.debug("System DNS resolved %s -> %s", hostname, ip)
-        return ip
-    except (socket.gaierror, OSError):
-        logger.debug("System DNS failed for %s, trying DoH fallback", hostname)
-
-    # 2. Fallback: DNS-over-HTTPS (Cloudflare, then Google)
     doh_servers = [
         "https://cloudflare-dns.com/dns-query",
         "https://dns.google/resolve",
@@ -74,6 +68,192 @@ def resolve_hostname(url: str) -> str:
 
     logger.warning("All DNS resolution methods failed for %s", hostname)
     return ""
+
+
+def resolve_host(hostname: str) -> str:
+    """Resolve a bare *hostname* to an IPv4 address.
+
+    Tries the system resolver first, then falls back to public DoH.
+
+    Args:
+        hostname: A bare hostname (e.g. ``example.com``).
+
+    Returns:
+        The resolved IPv4 address, or an empty string on failure.
+    """
+    if not hostname:
+        return ""
+
+    try:
+        ip = socket.gethostbyname(hostname)
+        logger.debug("System DNS resolved %s -> %s", hostname, ip)
+        return ip
+    except (socket.gaierror, OSError):
+        logger.debug("System DNS failed for %s, trying DoH fallback", hostname)
+
+    return _resolve_via_doh(hostname)
+
+
+def resolve_hostname(url: str) -> str:
+    """Resolve the hostname in *url* to an IPv4 address.
+
+    Tries the system resolver first, then falls back to Cloudflare and
+    Google public DoH endpoints.
+
+    Args:
+        url: A full URL (e.g. ``https://example.com/path``).
+
+    Returns:
+        The resolved IPv4 address, or an empty string on failure.
+    """
+    return resolve_host(urlparse(url).hostname or "")
+
+
+# ---------------------------------------------------------------------------
+# DoH-aware HTTP requests
+# ---------------------------------------------------------------------------
+#
+# The browser reaches DoH-resolved hosts via Chromium's --host-resolver-rules
+# (see build_chromium_args).  The requests-based analyzers (HTTP, download,
+# threat feeds) have no such knob, so when the system resolver fails for the
+# target host they error out — even though the host is reachable via DoH.
+#
+# request_with_doh_fallback() closes that gap: it issues a normal request, and
+# on a DNS-class ConnectionError it resolves the host via DoH and retries with
+# a thread-local getaddrinfo override.  Overriding getaddrinfo (rather than
+# rewriting the URL to the IP) keeps SNI, certificate validation, the Host
+# header, and redirect handling intact.
+#
+# The override is keyed per hostname in thread-local storage, so it is safe to
+# use from the scanner's analyzer thread pool: concurrent threads never see
+# each other's overrides, and hosts without an override resolve normally.
+
+_local = threading.local()
+_orig_getaddrinfo = socket.getaddrinfo
+_patch_installed = False
+_patch_lock = threading.Lock()
+
+# Substrings that mark a name-resolution failure inside a ConnectionError chain.
+_DNS_ERROR_MARKERS = (
+    "name or service not known",
+    "temporary failure in name resolution",
+    "nodename nor servname",
+    "getaddrinfo failed",
+    "name resolution",
+    "no address associated with hostname",
+    "failed to resolve",
+    "could not resolve host",
+)
+
+
+def _doh_getaddrinfo(host: Any, *args: Any, **kwargs: Any) -> Any:
+    """getaddrinfo shim that honours the current thread's DoH overrides."""
+    overrides = getattr(_local, "dns_overrides", None)
+    if overrides:
+        ip = overrides.get(host)
+        if ip:
+            return _orig_getaddrinfo(ip, *args, **kwargs)
+    return _orig_getaddrinfo(host, *args, **kwargs)
+
+
+def _ensure_getaddrinfo_patch() -> None:
+    """Install the getaddrinfo shim once, lazily and thread-safely.
+
+    When no thread has an active override the shim is a transparent
+    passthrough, so installing it has no effect on normal resolution.
+    """
+    global _patch_installed
+    if _patch_installed:
+        return
+    with _patch_lock:
+        if not _patch_installed:
+            socket.getaddrinfo = _doh_getaddrinfo
+            _patch_installed = True
+
+
+@contextmanager
+def _dns_override(hostname: str, ip: str) -> Iterator[None]:
+    """Temporarily map *hostname* to *ip* for getaddrinfo on this thread."""
+    _ensure_getaddrinfo_patch()
+    overrides = getattr(_local, "dns_overrides", None)
+    if overrides is None:
+        overrides = {}
+        _local.dns_overrides = overrides
+
+    had_prev = hostname in overrides
+    prev = overrides.get(hostname)
+    overrides[hostname] = ip
+    try:
+        yield
+    finally:
+        if had_prev:
+            overrides[hostname] = prev
+        else:
+            overrides.pop(hostname, None)
+
+
+def _is_dns_failure(exc: BaseException) -> bool:
+    """Return True if *exc* (or a cause in its chain) is a DNS resolution failure."""
+    seen: set[int] = set()
+    node: BaseException | None = exc
+    while node is not None and id(node) not in seen:
+        seen.add(id(node))
+        if isinstance(node, socket.gaierror):
+            return True
+        if any(marker in str(node).lower() for marker in _DNS_ERROR_MARKERS):
+            return True
+        node = node.__cause__ or node.__context__
+    return False
+
+
+def request_with_doh_fallback(
+    method: str,
+    url: str,
+    *,
+    session: requests.Session | None = None,
+    **kwargs: Any,
+) -> requests.Response:
+    """Make an HTTP request, falling back to DoH resolution on DNS failure.
+
+    Issues ``method url`` normally.  If it fails with a name-resolution
+    error, the target host is resolved via public DoH and the request is
+    retried once with a thread-local getaddrinfo override so SNI, TLS
+    verification, and redirects all behave as if the system resolver had
+    worked.  Non-DNS errors (and DNS errors that DoH also cannot resolve)
+    propagate unchanged to the caller.
+
+    Args:
+        method: HTTP method (``"GET"``, ``"HEAD"``, ...).
+        url: The URL to request.
+        session: Optional pre-configured ``requests.Session`` (e.g. with a
+            custom ``max_redirects``); a one-off request is used otherwise.
+        **kwargs: Passed through to ``requests`` (headers, timeout, etc.).
+
+    Returns:
+        The ``requests.Response``.
+
+    Raises:
+        requests.exceptions.RequestException: If the request fails for a
+            non-DNS reason, or DoH cannot resolve the host either.
+    """
+    requester = session.request if session is not None else requests.request
+
+    try:
+        return requester(method, url, **kwargs)
+    except requests.exceptions.ConnectionError as exc:
+        if not _is_dns_failure(exc):
+            raise
+
+        hostname = urlparse(url).hostname or ""
+        ip = _resolve_via_doh(hostname) if hostname else ""
+        if not ip:
+            raise
+
+        logger.info(
+            "System DNS failed for %s; retrying request via DoH IP %s", hostname, ip
+        )
+        with _dns_override(hostname, ip):
+            return requester(method, url, **kwargs)
 
 
 def compute_host_resolver_rule(url: str) -> str:

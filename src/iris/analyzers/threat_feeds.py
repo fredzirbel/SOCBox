@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import concurrent.futures
-import socket
 from typing import Any
 from urllib.parse import urlparse
 
@@ -11,6 +10,7 @@ import tldextract
 
 from iris.analyzers.base import BaseAnalyzer
 from iris.config import get_api_key
+from iris.dns_util import resolve_host
 from iris.feeds.abuseipdb import AbuseIPDBFeed
 from iris.feeds.google_safebrowsing import GoogleSafeBrowsingFeed
 from iris.feeds.virustotal import VirusTotalFeed
@@ -182,16 +182,17 @@ class ThreatFeedAnalyzer(BaseAnalyzer):
     def _resolve_ip(self, hostname: str) -> str | None:
         """Resolve hostname to IP address.
 
+        Uses the system resolver first, then a public DoH fallback, so feeds
+        that key off the IP (e.g. AbuseIPDB) still work when the local
+        resolver cannot reach the target host.
+
         Args:
             hostname: The hostname to resolve.
 
         Returns:
             IP address string, or None if resolution failed.
         """
-        try:
-            return socket.gethostbyname(hostname)
-        except socket.gaierror:
-            return None
+        return resolve_host(hostname) or None
 
     def _build_feeds(self, config: dict[str, Any], timeout: int) -> list:
         """Build the list of feeds that have valid configuration.
