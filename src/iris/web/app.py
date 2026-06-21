@@ -31,6 +31,7 @@ from starlette.responses import StreamingResponse
 
 from iris import store
 from iris.config import get_api_key, load_config
+from iris.feeds.virustotal import scanned_engine_total
 from iris.scanner import scan_url, shutdown_browser
 from iris.web.defang import defang as defang_url
 from iris.web.osint import generate_osint_links
@@ -889,7 +890,7 @@ async def hash_lookup(request: Request) -> JSONResponse:
     malicious = stats.get("malicious", 0)
     suspicious = stats.get("suspicious", 0)
     undetected = stats.get("undetected", 0)
-    total = sum(stats.values()) if stats else 0
+    total = scanned_engine_total(stats)
 
     attrs = data.get("data", {}).get("attributes", {})
     ptc = attrs.get("popular_threat_classification", {})
@@ -1533,7 +1534,7 @@ async def api_enrich_ip(request: Request) -> JSONResponse:
                     "suspicious": stats.get("suspicious", 0),
                     "harmless": stats.get("harmless", 0),
                     "undetected": stats.get("undetected", 0),
-                    "total": sum(stats.values()) if stats else 0,
+                    "total": scanned_engine_total(stats),
                     "country": attrs.get("country", ""),
                     "as_owner": attrs.get("as_owner", ""),
                     "asn": attrs.get("asn", 0),

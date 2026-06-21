@@ -15,6 +15,18 @@ def vt_url_id(url: str) -> str:
     return base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
 
 
+# Categories VirusTotal counts in its displayed detection ratio — engines that
+# actually returned a verdict. Summing *all* of last_analysis_stats instead would
+# also count type-unsupported / failure / timeout / confirmed-timeout, inflating
+# the denominator above the "X / Y" VT itself shows.
+_VT_VERDICT_CATEGORIES = ("malicious", "suspicious", "undetected", "harmless")
+
+
+def scanned_engine_total(stats: dict) -> int:
+    """Number of engines that returned a verdict (matches VT's displayed total)."""
+    return sum(int(stats.get(cat, 0) or 0) for cat in _VT_VERDICT_CATEGORIES)
+
+
 class VirusTotalFeed(BaseFeed):
     """Check URLs against VirusTotal's API v3.
 
@@ -74,7 +86,7 @@ class VirusTotalFeed(BaseFeed):
             )
             malicious = stats.get("malicious", 0)
             suspicious = stats.get("suspicious", 0)
-            total = sum(stats.values()) if stats else 0
+            total = scanned_engine_total(stats)
 
             detection_count = malicious + suspicious
             detection_rate = detection_count / total if total > 0 else 0.0

@@ -28,6 +28,7 @@ from Levenshtein import distance as levenshtein_distance
 from iris.analyzers.base import BaseAnalyzer
 from iris.config import get_api_key
 from iris.dns_util import request_with_doh_fallback
+from iris.feeds.virustotal import scanned_engine_total
 from iris.models import AnalyzerResult, AnalyzerStatus, FileDownloadInfo, Finding
 
 logger = logging.getLogger(__name__)
@@ -817,7 +818,7 @@ class DownloadAnalyzer(BaseAnalyzer):
             )
             malicious = stats.get("malicious", 0)
             suspicious = stats.get("suspicious", 0)
-            total = sum(stats.values()) if stats else 0
+            total = scanned_engine_total(stats)
 
             file_info.vt_detections = malicious + suspicious
             file_info.vt_total_engines = total
