@@ -39,8 +39,14 @@ def test_encoded_command_detected() -> None:
 
 def test_credential_phishing_inferred_from_findings() -> None:
     findings = [
-        Finding(description="Login form detected with password field", score_contribution=20, severity="high"),
-        Finding(description="Brand impersonation: Microsoft keywords on unrelated domain", score_contribution=15, severity="high"),
+        Finding(
+            description="Login form detected with password field",
+            score_contribution=20, severity="high",
+        ),
+        Finding(
+            description="Brand impersonation: Microsoft keywords on unrelated domain",
+            score_contribution=15, severity="high",
+        ),
     ]
     result = classify(url="https://bad.test", page_text="Sign in", findings=findings)
     assert "credential_phishing" in _ids(result)
