@@ -32,6 +32,13 @@ services:
       # interactive.vnc_password in config/local.yaml (which the app embeds in
       # the viewer URL). Empty = no VNC password (dev only).
       - VNC_PASSWORD=${VNC_PASSWORD:-}
+      # Auth secrets (never bake into the image). In oidc mode the app refuses
+      # to start unless the OIDC + session secrets are present. For a local
+      # spin-up without an IdP, set IRIS_AUTH_DEV=1 (INSECURE auto-login).
+      - IRIS_AUTH_DEV=${IRIS_AUTH_DEV:-}
+      - IRIS_SESSION_SECRET=${IRIS_SESSION_SECRET:-}
+      - IRIS_OIDC_CLIENT_SECRET=${IRIS_OIDC_CLIENT_SECRET:-}
+      - IRIS_API_TOKENS=${IRIS_API_TOKENS:-}
 
     # Chrome needs more than the default 64 MB shared memory
     shm_size: "2gb"

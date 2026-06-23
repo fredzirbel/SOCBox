@@ -186,9 +186,37 @@ def load_config(config_path: str | Path | None = None) -> dict[str, Any]:
         if value:
             api_keys[key_name] = value
 
+    _overlay_auth_secrets(config)
     _validate_scoring_config(config)
 
     return config
+
+
+def _overlay_auth_secrets(config: dict[str, Any]) -> None:
+    """Overlay auth secrets from the environment (never the committed config).
+
+    Keeps OIDC/session/token secrets out of YAML files. Auth *correctness*
+    (e.g. OIDC fully configured) is validated at web-app startup, not here, so
+    the CLI scanner and tests that only need scanning config still load cleanly.
+    """
+    auth = config.setdefault("auth", {})
+    oidc = auth.setdefault("oidc", {})
+
+    session_secret = os.getenv("IRIS_SESSION_SECRET", "")
+    if session_secret:
+        auth["session_secret"] = session_secret
+
+    client_secret = os.getenv("IRIS_OIDC_CLIENT_SECRET", "")
+    if client_secret:
+        oidc["client_secret"] = client_secret
+
+    tokens = os.getenv("IRIS_API_TOKENS", "")
+    if tokens:
+        auth["service_tokens"] = [t.strip() for t in tokens.split(",") if t.strip()]
+
+    # IRIS_AUTH_DEV=1 is the explicit, deliberate escape hatch for local testing.
+    if os.getenv("IRIS_AUTH_DEV", "").strip().lower() in ("1", "true", "yes"):
+        auth["mode"] = "dev"
 
 
 def get_api_key(config: dict[str, Any], feed_name: str) -> str:

@@ -24,7 +24,10 @@ disposition.
   viewer for in-browser CAPTCHA solving; set `VNC_PASSWORD`).
 - **Dev server:** `IRIS_PORT=8015 .venv/Scripts/python.exe -m iris.web.app --no-reload`
   (no noVNC/Xvfb — the live-solver takeover needs the container entrypoint).
-- **Tests/lint:** `.venv/Scripts/python.exe -m pytest -q` (62 passing) · `... -m ruff check src tests`
+- **Tests/lint:** `.venv/Scripts/python.exe -m pytest -q` (90 passing) · `... -m ruff check src tests`
+  · `... -m bandit -ll -r src` · `... -m pip_audit --skip-editable`
+- **Auth to run the server:** OIDC env (or `IRIS_AUTH_DEV=1` for an insecure local spin-up) —
+  the server fail-closes otherwise.
 - **CLI:** `iris <url>` · `iris <url> -i` (interactive CAPTCHA) · `python -m iris.feeds_import ...`
 
 ## Environment quirks (important)
@@ -101,12 +104,32 @@ All return `final_url`. Accept `{"url":...}` (runs a scan) or `?scan_id=` (reuse
   auth/SSO or a VPN before any network exposure.** `VNC_PASSWORD` (compose env) must match
   `interactive.vnc_password` (local.yaml).
 
+## Security / hardening (auth, SSRF, rate limiting)
+- **AuthN/AuthZ** ([web/auth.py](src/iris/web/auth.py)): analysts log in via **OIDC SSO**
+  (Azure AD/Okta, Authlib) → signed session cookie; the agent uses **bearer service tokens**.
+  A pure-ASGI enforcement middleware (SSE-safe) gates every page, `/api/*`, `/stream`, and
+  `/screenshots`; unauth → 302 `/login` (HTML) or 401 (API). Public: `/static`, `/login`,
+  `/auth/callback`, `/logout`, `/health`. `auth.mode` ∈ {`oidc`, `dev`, `disabled`}; **dev**
+  (auto-login) requires `IRIS_AUTH_DEV=1`. Server **fail-closes** (main() exits) if oidc mode
+  is missing config.
+- **SSRF guard** ([netguard.py](src/iris/netguard.py)): every scan-entry rejects (400) targets
+  resolving to private/loopback/link-local/metadata (169.254.169.254). `ssrf.block_private`
+  (default true) + `ssrf.allowlist`.
+- **Rate limiting** (slowapi): scan endpoints capped at `ratelimit.scan_per_minute` (default 30)
+  per token/IP → 429.
+- **Secure headers** (CSP w/ Google-Fonts + noVNC `frame-src`; X-Frame-Options, nosniff,
+  Referrer-Policy) + `GET /health`. **CI**: bandit + pip-audit added (alongside ruff/pytest/
+  gitleaks).
+- ⚠️ **Secrets via env only** (never committed): `IRIS_SESSION_SECRET`,
+  `IRIS_OIDC_CLIENT_SECRET`, `IRIS_API_TOKENS`. Compose passes them through.
+
 ## Config & secrets
 - `config/default.yaml` (committed, empty slots) / `config/local.yaml` (**gitignored**, real keys).
 - Keys present in local.yaml: virustotal, google_safebrowsing, abuseipdb, **urlhaus**.
 - `notifications.webhook_url` (+ `webhook_timeout`) for async completion webhooks.
 - `interactive.*` — enable flag, `novnc_public_url`, `vnc_password`, `session_timeout_ms`,
   `display` for the in-browser CAPTCHA solver (default **disabled**).
+- `auth.*` / `ssrf.*` / `ratelimit.*` — see Security section above.
 - ⚠️ **Rotate the URLhaus key** — it was pasted into a chat transcript.
 
 ## Done this session (all on `main`)
@@ -132,9 +155,13 @@ All return `final_url`. Accept `{"url":...}` (runs a scan) or `?scan_id=` (reuse
     + **CAPTCHA `action_required` desktop notification**.
 
 ## Open / pending (next-session candidates, roughly prioritized)
-- **#6 API auth** — every `/api/*` endpoint is currently **unauthenticated** (service tokens
-  for the agent + SSO for the UI). Needed before exposing to the agent on the network.
-  **Now also gates the noVNC live-solver (6080)** — hard dependency before exposing #2.
+- **#6 API auth** ✅ **DONE** — OIDC SSO (analysts) + bearer service tokens (agent) gate every
+  page/`/api/*`/`/stream`/`/screenshots`; SSRF guard + rate limiting + secure headers + CI
+  bandit/pip-audit added. See the **Security / hardening** section. *Real Azure AD round-trip
+  to be confirmed in the SOC tenant (app registration + redirect URI).* Residual follow-ups:
+  per-user RBAC; reverse-proxy the noVNC :6080 behind the app session (currently view_url is
+  only handed to authenticated sessions, but :6080 itself is VNC-password-gated only);
+  HMAC-signed webhooks; CSP nonces (drop `unsafe-inline`); non-root browser container.
 - **#2 in-browser CAPTCHA solve** ✅ **v1 DONE + Docker-verified** (see section above):
   transparent noVNC takeover, behind `interactive.enabled`. Verified end-to-end in the
   container — scanning the reCAPTCHA demo with `human_present` fired `action_required` +

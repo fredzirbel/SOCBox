@@ -23,16 +23,26 @@ from urllib.parse import quote
 import requests as http_requests
 import tldextract
 import uvicorn
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from starlette.responses import StreamingResponse
 
 from iris import store
 from iris.config import get_api_key, load_config
 from iris.feeds.virustotal import scanned_engine_total
+from iris.netguard import target_block_reason
 from iris.scanner import scan_url, shutdown_browser
+from iris.web.auth import (
+    SecurityHeadersMiddleware,
+    build_csp,
+    init_auth,
+    verify_auth_or_exit,
+)
 from iris.web.defang import defang as defang_url
 from iris.web.osint import generate_osint_links
 
@@ -88,6 +98,26 @@ async def _lifespan(app: FastAPI):
 app = FastAPI(title="IRIS", version="0.1.0", lifespan=_lifespan)
 
 templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
+
+# ---------------------------------------------------------------------------
+# Rate limiting (slowapi) — keyed on service token (agent) or client IP
+# ---------------------------------------------------------------------------
+
+
+def _ratelimit_key(request: Request) -> str:
+    header = request.headers.get("Authorization", "")
+    if header.startswith("Bearer "):
+        return "tok:" + header[7:].strip()[:24]
+    return get_remote_address(request)
+
+
+def _scan_rate_limit() -> str:
+    return f"{_config.get('ratelimit', {}).get('scan_per_minute', 30)}/minute"
+
+
+limiter = Limiter(key_func=_ratelimit_key)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 def _static_version() -> str:
@@ -158,6 +188,15 @@ app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="stat
 # Serve screenshot images
 _SCREENSHOT_DIR.mkdir(exist_ok=True)
 app.mount("/screenshots", StaticFiles(directory=str(_SCREENSHOT_DIR)), name="screenshots")
+
+# Authentication: OIDC SSO for analysts + bearer service tokens for the agent.
+# Wires session + enforcement middleware and the /login /auth/callback /logout
+# /health routes. Fail-closed validation for a real OIDC deploy runs in main().
+init_auth(app, _config)
+
+# Security response headers (outermost: applies to every response, incl. auth
+# redirects/401s). Added after init_auth so it wraps the auth + session layers.
+app.add_middleware(SecurityHeadersMiddleware, csp=build_csp(_config))
 
 # ---------------------------------------------------------------------------
 # In-memory scan store with disk-backed cache
@@ -450,6 +489,22 @@ def _resolve_ip(url: str) -> str:
     return resolve_hostname(url)
 
 
+def _enforce_ssrf(url: str) -> None:
+    """Reject a scan whose target resolves to non-public infrastructure.
+
+    Raises HTTPException(400) so the scan never starts — covering both the
+    requests-based analyzers and the browser.
+    """
+    cfg = _config.get("ssrf", {})
+    reason = target_block_reason(
+        url,
+        block_private=cfg.get("block_private", True),
+        allowlist=cfg.get("allowlist", []),
+    )
+    if reason:
+        raise HTTPException(status_code=400, detail=f"Blocked: {reason}")
+
+
 # ---------------------------------------------------------------------------
 # SSE streaming infrastructure
 # ---------------------------------------------------------------------------
@@ -517,6 +572,7 @@ async def index(request: Request) -> HTMLResponse:
 
 
 @app.post("/scan")
+@limiter.limit(_scan_rate_limit)
 def scan(request: Request, url: str = Form(...)) -> RedirectResponse:
     """Accept a URL, run the IRIS scan, and redirect to results.
 
@@ -534,6 +590,7 @@ def scan(request: Request, url: str = Form(...)) -> RedirectResponse:
     # Normalise URL scheme
     if not url.startswith(("http://", "https://")):
         url = f"https://{url}"
+    _enforce_ssrf(url)
 
     scan_id = uuid.uuid4().hex[:12]
 
@@ -575,6 +632,7 @@ def scan(request: Request, url: str = Form(...)) -> RedirectResponse:
 
 
 @app.post("/api/scan")
+@limiter.limit(_scan_rate_limit)
 async def api_scan(request: Request) -> JSONResponse:
     """Start a scan in the background and return the scan_id immediately.
 
@@ -595,6 +653,7 @@ async def api_scan(request: Request) -> JSONResponse:
     url = raw_url
     if not url.startswith(("http://", "https://")):
         url = f"https://{url}"
+    _enforce_ssrf(url)
 
     # An analyst can solve an un-automatable CAPTCHA live only when the
     # feature is enabled AND this is a single interactive web scan (the UI
@@ -974,6 +1033,7 @@ async def api_results(scan_id: str) -> JSONResponse:
 
 
 @app.post("/api/scan/sync")
+@limiter.limit(_scan_rate_limit)
 async def api_scan_sync(request: Request) -> JSONResponse:
     """Run a synchronous scan and return complete JSON results.
 
@@ -999,6 +1059,7 @@ async def api_scan_sync(request: Request) -> JSONResponse:
     url = raw_url
     if not url.startswith(("http://", "https://")):
         url = f"https://{url}"
+    _enforce_ssrf(url)
 
     scan_id = uuid.uuid4().hex[:12]
 
@@ -1098,6 +1159,7 @@ async def _v1_run_scan(url_raw: str) -> tuple[str, dict] | tuple[None, None]:
         return None, None
     if not url.startswith(("http://", "https://")):
         url = f"https://{url}"
+    _enforce_ssrf(url)
 
     scan_id = uuid.uuid4().hex[:12]
     extracted = tldextract.extract(url)
@@ -1142,6 +1204,7 @@ async def _v1_resolve(request: Request) -> tuple[str, dict] | tuple[None, None]:
 
 
 @app.post("/api/v1/url/scan")
+@limiter.limit(_scan_rate_limit)
 async def v1_url_scan(request: Request) -> JSONResponse:
     """Full TAP result for a URL: verdict, final_url, text, screenshot, classifications."""
     scan_id, entry = await _v1_resolve(request)
@@ -1277,6 +1340,7 @@ def _run_async_job(job_id: str, url: str, callback: str) -> None:
 
 
 @app.post("/api/v1/scan/async")
+@limiter.limit(_scan_rate_limit)
 async def v1_scan_async(request: Request) -> JSONResponse:
     """Queue a scan; returns a job_id. POSTs the result to callback_url on done."""
     try:
@@ -1286,6 +1350,9 @@ async def v1_scan_async(request: Request) -> JSONResponse:
     url = (body.get("url") or "").strip()
     if not url:
         return JSONResponse({"error": "URL required"}, status_code=400)
+    if not url.startswith(("http://", "https://")):
+        url = f"https://{url}"
+    _enforce_ssrf(url)
     callback = (body.get("callback_url") or "").strip() or _config.get(
         "notifications", {}).get("webhook_url", "")
 
@@ -1580,12 +1647,15 @@ def main() -> None:
     """Start the IRIS web server."""
     import sys
 
+    # Fail-closed: refuse to start a real server with misconfigured OIDC auth.
+    verify_auth_or_exit(_config)
+
     # Enable auto-reload by default during development so code changes
     # take effect without manually restarting.  Pass --no-reload to disable.
     is_dev = "--no-reload" not in sys.argv
     import os
 
-    host = os.getenv("IRIS_HOST", "0.0.0.0")
+    host = os.getenv("IRIS_HOST", "0.0.0.0")  # nosec B104 - containerized server, bind intended
     port = int(os.getenv("IRIS_PORT", "8000"))
     uvicorn.run(
         "iris.web.app:app",

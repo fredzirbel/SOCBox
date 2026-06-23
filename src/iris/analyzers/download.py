@@ -577,7 +577,7 @@ class DownloadAnalyzer(BaseAnalyzer):
             Tuple of (sha1_hex, sha256_hex, size_bytes).
         """
         try:
-            sha1 = hashlib.sha1()
+            sha1 = hashlib.sha1(usedforsecurity=False)  # file identity, not crypto
             sha256 = hashlib.sha256()
             total_bytes = 0
             with open(file_path, "rb") as fh:
@@ -760,7 +760,7 @@ class DownloadAnalyzer(BaseAnalyzer):
             )
             resp.raise_for_status()
 
-            sha1 = hashlib.sha1()
+            sha1 = hashlib.sha1(usedforsecurity=False)  # file identity, not crypto
             sha256 = hashlib.sha256()
             total_bytes = 0
 

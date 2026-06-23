@@ -47,6 +47,37 @@ interactive:
 bulk:
   max_concurrent: 5
 
+# ── Authentication ───────────────────────────────────────────────────────────
+# Analysts log in via OIDC SSO; the AI triage agent / SOAR uses bearer service
+# tokens. Every page, /api/*, /stream, and /screenshots requires a valid session
+# cookie OR bearer token. Secrets come from env, NEVER this committed file:
+#   IRIS_SESSION_SECRET        - signs the session cookie (generate 32+ random bytes)
+#   IRIS_OIDC_CLIENT_SECRET    - the OIDC app client secret
+#   IRIS_API_TOKENS            - comma-separated service tokens for the agent
+auth:
+  # oidc = SSO (production) | dev = INSECURE auto-login for local testing
+  #   (also requires IRIS_AUTH_DEV=1) | disabled = no auth (air-gapped only)
+  mode: oidc
+  oidc:
+    # e.g. https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration
+    discovery_url: ""
+    client_id: ""
+    scopes: "openid email profile"
+    # Public URL the IdP redirects back to, e.g. https://iris.internal/auth/callback
+    redirect_url: ""
+
+# ── SSRF guard ───────────────────────────────────────────────────────────────
+# Block scans whose target resolves to a private / loopback / link-local /
+# cloud-metadata address, so the scanner can't be turned into a server-side
+# request oracle against internal infrastructure.
+ssrf:
+  block_private: true
+  allowlist: []   # hostnames exempted (e.g. sanctioned internal test rigs)
+
+# ── Rate limiting ────────────────────────────────────────────────────────────
+ratelimit:
+  scan_per_minute: 30   # per service-token / client IP
+
 scoring:
   weights:
     # Analyzer weights are now validated and must sum to 100.
