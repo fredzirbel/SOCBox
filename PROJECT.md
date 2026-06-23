@@ -154,6 +154,25 @@ All return `final_url`. Accept `{"url":...}` (runs a scan) or `?scan_id=` (reuse
 10. **v1 TAP API** + **TP/BTP/FP dispositions** + **SQLite persistence** + **async webhook**
     + **CAPTCHA `action_required` desktop notification**.
 
+## Performance pass (latest session, on `main`)
+Per-analyzer profiling of a single scan (`example.com`) drove two targeted fixes that
+~halved wall-clock time — **dev box 23.9s → 11.8s** (and lower in the container, where
+`dns: [1.1.1.1, 8.8.8.8]` makes the DNS lookups ~tens of ms instead of the dev router's
+~2s each). Verdict/output contract unchanged; 94 tests / ruff / bandit green.
+1. **Cue-aware download poll** ([analyzers/download.py](src/iris/analyzers/download.py)) —
+   the browser-download fallback polled a fixed 12s for a download event on *every* scan,
+   additive at the tail. Now releases a static landing page after 3s (genuine JS
+   auto-downloads fire in ~1-2s) but still grants the full 12s when the page's visible text
+   advertises a pending download ("preparing your file", "verifying", …). ~9s off the common
+   case, no loss of delayed-payload detection. New `tests/unit/test_download_intent.py`.
+2. **Dropped reverse-DNS PTR check** ([analyzers/whois_dns.py](src/iris/analyzers/whois_dns.py))
+   — `socket.gethostbyaddr` ignored the configured resolvers, stalled ~4.5s before timing
+   out, and gave near-zero signal (modern phishing is CDN-fronted → no meaningful PTR). It
+   also spuriously dinged benign CDN sites. WHOIS domain age / NXDOMAIN / MX are unaffected.
+   Note: WHOIS itself is cheap (~0.4s) — the old "WHOIS is slow" intuition was really the PTR
+   lookup. The deferred Download analyzer can't start until the parallel phase's long pole
+   finishes, so shrinking WHOIS/DNS also pulls everything after it earlier.
+
 ## Open / pending (next-session candidates, roughly prioritized)
 - **#6 API auth** ✅ **DONE** — OIDC SSO (analysts) + bearer service tokens (agent) gate every
   page/`/api/*`/`/stream`/`/screenshots`; SSRF guard + rate limiting + secure headers + CI
@@ -179,6 +198,13 @@ All return `final_url`. Accept `{"url":...}` (runs a scan) or `?scan_id=` (reuse
   the concurrency slot) before marking it ERROR. WHOIS/DNS keeps its native resolver — its
   "does not resolve" finding is an intentional signal — and is covered by the compose `dns:`
   resolvers at the system-resolver level. 6 new unit tests (`test_dns_doh_fallback.py`).
+- **More scan-speed headroom** (after the latest perf pass): the deferred Download analyzer
+  runs serially on the main thread *after* the whole parallel phase finishes, but the main
+  thread sits idle from when the browser analyzers end until the slowest thread analyzer
+  (WHOIS/DNS) returns — Download could run in that window. Also, the landing page is
+  navigated/screenshotted twice (overlapped `capture_screenshot` → `screenshot_path` for the
+  API, plus `capture_multi_screenshots` → `multi_screenshots.initial` for the UI); consolidating
+  could save ~2s but has two consumers. Both are bigger refactors, parked.
 - Bulk "Import from feed" button is **online-only**; expose the `--all`/offline toggle in the UI.
 - Decide whether a **critical classification** (e.g. ClickFix) should nudge the verdict
   (currently orthogonal by design).
