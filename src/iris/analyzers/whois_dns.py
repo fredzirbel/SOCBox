@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import socket
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
@@ -139,8 +138,7 @@ class WhoisDNSAnalyzer(BaseAnalyzer):
 
         # Check if domain resolves at all
         try:
-            answers = dns.resolver.resolve(hostname, "A")
-            ips = [str(rdata) for rdata in answers]
+            dns.resolver.resolve(hostname, "A")
         except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
             findings.append(
                 Finding(
@@ -174,29 +172,10 @@ class WhoisDNSAnalyzer(BaseAnalyzer):
         except Exception:
             pass
 
-        # Reverse DNS check
-        if ips:
-            try:
-                reverse_name = socket.gethostbyaddr(ips[0])
-                ptr_hostname = reverse_name[0].lower()
-                if domain.lower() not in ptr_hostname:
-                    findings.append(
-                        Finding(
-                            description=(
-                                f"Reverse DNS mismatch: {ips[0]} resolves to "
-                                f"'{ptr_hostname}', expected '{domain}'"
-                            ),
-                            score_contribution=10.0,
-                            severity="medium",
-                        )
-                    )
-            except (socket.herror, socket.gaierror):
-                findings.append(
-                    Finding(
-                        description=f"No reverse DNS (PTR) record for {ips[0]}",
-                        score_contribution=5.0,
-                        severity="low",
-                    )
-                )
+        # Reverse DNS (PTR) checking was intentionally removed: it relied on the
+        # OS resolver (ignoring the configured DNS servers), routinely stalled
+        # several seconds before timing out, and produced near-zero signal —
+        # modern phishing is overwhelmingly CDN-fronted, where PTR records are
+        # absent or shared and a "mismatch" means nothing.
 
         return findings
