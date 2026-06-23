@@ -65,8 +65,22 @@ _MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024
 
 # Seconds to wait for a browser-triggered download before giving up.
 # Many phishing kits show fake "loading" screens for 5-15 seconds before
-# delivering the payload, so this needs to be generous.
+# delivering the payload, so this needs to be generous — but only when the
+# page actually shows download-intent cues. A genuine JS auto-download fires
+# within a second or two of load, so a static landing page (the common case:
+# credential phishing, fake login, ClickFix) that will never download is
+# released after the short window instead of stalling the whole scan.
 _BROWSER_DL_WAIT_SEC = 12
+_BROWSER_DL_QUICK_SEC = 3
+
+# Visible page-text cues that a (possibly delayed) download is being prepared.
+# Their presence justifies waiting the full _BROWSER_DL_WAIT_SEC budget.
+_DOWNLOAD_INTENT_CUES = (
+    "download will", "your download", "preparing your", "your file is",
+    "your file will", "verifying", "please wait", "download starting",
+    "starting download", "generating your", "almost ready",
+    "click here to download", "download should begin",
+)
 
 
 class DownloadAnalyzer(BaseAnalyzer):
@@ -464,11 +478,20 @@ class DownloadAnalyzer(BaseAnalyzer):
 
             # Poll for a download event.  Many phishing sites show a fake
             # "loading" or "verifying" page for several seconds before the
-            # real download fires (JS setTimeout, fetch-then-blob, etc.).
-            # We poll every second up to _BROWSER_DL_WAIT_SEC so we return
-            # as soon as the download arrives instead of always sleeping
-            # the full duration.
-            for _tick in range(_BROWSER_DL_WAIT_SEC):
+            # real download fires (JS setTimeout, fetch-then-blob, etc.), so we
+            # poll once per second and return the instant a download arrives.
+            #
+            # The wait budget is adaptive: a static landing page that will
+            # never download (most credential-phishing / ClickFix pages) is
+            # released after _BROWSER_DL_QUICK_SEC, while a page that visibly
+            # advertises a pending download is given the full window. This
+            # keeps the common case fast without missing delayed payloads.
+            max_wait = (
+                _BROWSER_DL_WAIT_SEC
+                if self._page_shows_download_intent(page)
+                else _BROWSER_DL_QUICK_SEC
+            )
+            for _tick in range(max_wait):
                 if download_info and download_info.get("path"):
                     break
                 page.wait_for_timeout(1000)
@@ -510,6 +533,30 @@ class DownloadAnalyzer(BaseAnalyzer):
                     context.close()
                 except Exception:
                     pass
+
+    def _page_shows_download_intent(self, page: Any) -> bool:
+        """Return True if the page's visible text advertises a pending download.
+
+        Used to decide whether to wait the full browser-download budget. A page
+        that says e.g. "your download will begin shortly" or "verifying" may
+        deliver a payload after a delay and is worth waiting on; a plain landing
+        page is not, so the poll can exit early.
+
+        Args:
+            page: The Playwright page, already navigated.
+
+        Returns:
+            True if a download-intent cue is present in the page text.
+        """
+        try:
+            text = page.evaluate(
+                "() => (document.body ? document.body.innerText : '')"
+                ".toLowerCase().slice(0, 3000)"
+            ) or ""
+        except Exception as exc:
+            logger.debug("Download-intent check failed: %s", exc)
+            return False
+        return any(cue in text for cue in _DOWNLOAD_INTENT_CUES)
 
     def _check_cloudflare_phishing_page(
         self, page: Any,
