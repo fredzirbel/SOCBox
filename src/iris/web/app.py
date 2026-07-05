@@ -182,6 +182,27 @@ def _filesizeformat(value: int) -> str:
 
 templates.env.filters["filesizeformat"] = _filesizeformat
 
+
+def _json_script_safe(obj: Any) -> str:
+    """Serialize *obj* to JSON safe to embed inside an HTML ``<script>`` block.
+
+    ``json.dumps`` leaves ``<``, ``>``, ``&`` and the U+2028/U+2029 line
+    separators intact — any of which can break out of a ``<script>`` context
+    (e.g. a scanned page delivering a file whose name contains ``</script>``,
+    or classification evidence lifted from attacker-controlled page text).
+    Escaping them as ``\\uXXXX`` keeps the JSON valid while preventing the
+    markup/JS injection that ``{{ ... | safe }}`` would otherwise allow.
+    """
+    return (
+        json.dumps(obj, default=str)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace(" ", "\\u2028")
+        .replace(" ", "\\u2029")
+    )
+
+
 # Serve CSS/JS static assets
 app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="static")
 
@@ -860,7 +881,10 @@ async def results(request: Request, scan_id: str) -> HTMLResponse:
             status_code=404,
         )
 
-    report_json = json.dumps(_report_to_copydata(entry), default=str)
+    # Script-safe: this is injected into a <script> block via |safe, and the
+    # report carries attacker-controlled fields (filename, classification
+    # evidence, finding text) that could otherwise break out with </script>.
+    report_json = _json_script_safe(_report_to_copydata(entry))
 
     # Extract multi-screenshot data for the template
     multi_ss = getattr(entry["report"], "multi_screenshots", {}) or {}
@@ -1353,8 +1377,26 @@ async def v1_scan_async(request: Request) -> JSONResponse:
     if not url.startswith(("http://", "https://")):
         url = f"https://{url}"
     _enforce_ssrf(url)
-    callback = (body.get("callback_url") or "").strip() or _config.get(
-        "notifications", {}).get("webhook_url", "")
+
+    # A caller-supplied callback_url is an SSRF vector — IRIS will POST to it
+    # server-side. Validate it against the same guard as scan targets so it
+    # can't be pointed at internal services / cloud metadata. The config
+    # webhook_url is admin-set and trusted (may legitimately be internal).
+    supplied_callback = (body.get("callback_url") or "").strip()
+    if supplied_callback:
+        cfg = _config.get("ssrf", {})
+        reason = target_block_reason(
+            supplied_callback,
+            block_private=cfg.get("block_private", True),
+            allowlist=cfg.get("allowlist", []),
+        )
+        if reason:
+            return JSONResponse(
+                {"error": f"callback_url blocked: {reason}"}, status_code=400,
+            )
+        callback = supplied_callback
+    else:
+        callback = _config.get("notifications", {}).get("webhook_url", "")
 
     job_id = uuid.uuid4().hex[:12]
     with _jobs_lock:
@@ -1553,7 +1595,8 @@ async def bulk_page(request: Request) -> HTMLResponse:
     with _bulk_scans_lock:
         bulk_entry = _bulk_scans.get(bulk_id) if bulk_id else None
     if bulk_entry is not None:
-        bulk_data = json.dumps(bulk_entry, default=str)
+        # Script-safe: injected into a <script> block via |safe (holds scanned URLs).
+        bulk_data = _json_script_safe(bulk_entry)
 
     return templates.TemplateResponse(
         request,
@@ -1650,10 +1693,15 @@ def main() -> None:
     # Fail-closed: refuse to start a real server with misconfigured OIDC auth.
     verify_auth_or_exit(_config)
 
-    # Enable auto-reload by default during development so code changes
-    # take effect without manually restarting.  Pass --no-reload to disable.
-    is_dev = "--no-reload" not in sys.argv
+    # Auto-reload is OPT-IN (--reload or IRIS_RELOAD=1). It spawns a reloader
+    # subprocess, which is wrong for production: IRIS holds scan/job/stream state
+    # and the persistent per-thread browsers in memory, none of which survive a
+    # reload. (--no-reload is still accepted as an explicit no-op.)
     import os
+
+    reload_requested = "--reload" in sys.argv or os.getenv(
+        "IRIS_RELOAD", "").strip().lower() in ("1", "true", "yes")
+    is_dev = reload_requested and "--no-reload" not in sys.argv
 
     host = os.getenv("IRIS_HOST", "0.0.0.0")  # nosec B104 - containerized server, bind intended
     port = int(os.getenv("IRIS_PORT", "8000"))

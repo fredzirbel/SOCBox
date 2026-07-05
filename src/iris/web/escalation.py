@@ -28,8 +28,27 @@ def _kql(name: str, description: str, query: str) -> dict[str, str]:
     return {"name": name, "description": description, "query": query}
 
 
+def _kql_str(value: str) -> str:
+    """Escape a value for safe interpolation into a double-quoted KQL literal.
+
+    The generated queries are pasted by an analyst into Defender/Sentinel, and
+    some pivots (notably the download filename from ``Content-Disposition``) are
+    attacker-controlled. Escaping backslashes/quotes and stripping newlines
+    stops a crafted value from breaking out of the string or injecting extra
+    query lines.
+    """
+    return (
+        str(value or "")
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", " ")
+        .replace("\n", " ")
+    )
+
+
 def _url_delivery_queries(domain: str) -> list[dict[str, str]]:
     """URL-click + email-delivery queries — relevant to any scanned URL."""
+    domain = _kql_str(domain)
     return [
         _kql(
             "URL Clicks",
@@ -85,8 +104,8 @@ def _download_queries(
     domain/IP network query.
     """
     fd = file_download or {}
-    sha256 = (fd.get("sha256") or "").strip()
-    filename = (fd.get("filename") or "").strip()
+    sha256 = _kql_str((fd.get("sha256") or "").strip())
+    filename = _kql_str((fd.get("filename") or "").strip())
 
     # Build the "SHA256 == ... or FileName =~ ..." predicate from whatever we have.
     file_preds: list[str] = []
@@ -123,9 +142,9 @@ def _download_queries(
     # Network query keys off the hosting domain / resolved IP.
     net_preds: list[str] = []
     if domain:
-        net_preds.append(f'RemoteUrl has "{domain}"')
+        net_preds.append(f'RemoteUrl has "{_kql_str(domain)}"')
     if resolved_ip:
-        net_preds.append(f'RemoteIP == "{resolved_ip}"')
+        net_preds.append(f'RemoteIP == "{_kql_str(resolved_ip)}"')
     if net_preds:
         queries.append(_kql(
             "Host Connections",

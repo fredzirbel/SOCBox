@@ -12,6 +12,7 @@ that Playwright can still reach the site for analysis.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import socket
 import threading
@@ -22,6 +23,28 @@ from urllib.parse import urlparse
 import requests
 
 logger = logging.getLogger(__name__)
+
+
+def is_public_ip(ip: str) -> bool:
+    """Return True if *ip* is a routable public address.
+
+    Used to keep the DoH fallback from ever handing back a private, loopback,
+    link-local (incl. cloud metadata 169.254.169.254), multicast, reserved, or
+    unspecified address — an SSRF bypass, since a public domain could carry an
+    internal A record that the system resolver refuses but public DoH returns.
+    """
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return not (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_multicast
+        or addr.is_reserved
+        or addr.is_unspecified
+    )
 
 
 def _resolve_via_doh(hostname: str) -> str:
@@ -60,9 +83,17 @@ def _resolve_via_doh(hostname: str) -> str:
             for answer in data.get("Answer", []):
                 if answer.get("type") == 1:  # A record
                     ip = answer.get("data", "")
-                    if ip:
-                        logger.info("DoH (%s) resolved %s -> %s", server, hostname, ip)
-                        return ip
+                    if not ip:
+                        continue
+                    # SSRF guard: never return an internal address from DoH.
+                    if not is_public_ip(ip):
+                        logger.warning(
+                            "DoH (%s) returned non-public IP %s for %s — refusing",
+                            server, ip, hostname,
+                        )
+                        return ""
+                    logger.info("DoH (%s) resolved %s -> %s", server, hostname, ip)
+                    return ip
         except Exception as exc:
             logger.debug("DoH %s failed for %s: %s", server, hostname, exc)
 

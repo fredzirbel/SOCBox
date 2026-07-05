@@ -173,11 +173,15 @@ def init_auth(app: Any, config: dict[str, Any]) -> None:
     # Add INNER first, OUTER last: SessionMiddleware must run before the enforcer
     # so request.session is populated when AuthMiddleware reads it.
     app.add_middleware(AuthMiddleware)
+    # Mark the session cookie Secure when served over TLS. Defaults off because
+    # an internal/VPN deployment may be plain HTTP; set auth.cookie_secure: true
+    # (production behind TLS) so the cookie is never sent over cleartext.
+    cookie_secure = bool(_auth(config).get("cookie_secure", False))
     app.add_middleware(
         SessionMiddleware,
         secret_key=session_secret,
         same_site="lax",
-        https_only=False,  # internal/VPN may be plain HTTP; set True behind TLS
+        https_only=cookie_secure,
         max_age=8 * 3600,
     )
 

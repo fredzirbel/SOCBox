@@ -58,6 +58,9 @@ auth:
   # oidc = SSO (production) | dev = INSECURE auto-login for local testing
   #   (also requires IRIS_AUTH_DEV=1) | disabled = no auth (air-gapped only)
   mode: oidc
+  # Mark the session cookie Secure (HTTPS-only). Leave false for a plain-HTTP
+  # internal/VPN deployment; set true in production behind TLS.
+  cookie_secure: false
   oidc:
     # e.g. https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration
     discovery_url: ""
