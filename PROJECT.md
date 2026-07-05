@@ -24,7 +24,7 @@ disposition.
   viewer for in-browser CAPTCHA solving; set `VNC_PASSWORD`).
 - **Dev server:** `IRIS_PORT=8015 .venv/Scripts/python.exe -m iris.web.app --no-reload`
   (no noVNC/Xvfb — the live-solver takeover needs the container entrypoint).
-- **Tests/lint:** `.venv/Scripts/python.exe -m pytest -q` (90 passing) · `... -m ruff check src tests`
+- **Tests/lint:** `.venv/Scripts/python.exe -m pytest -q` (119 passing) · `... -m ruff check src tests`
   · `... -m bandit -ll -r src` · `... -m pip_audit --skip-editable`
 - **Auth to run the server:** OIDC env (or `IRIS_AUTH_DEV=1` for an insecure local spin-up) —
   the server fail-closes otherwise.
@@ -173,6 +173,35 @@ Per-analyzer profiling of a single scan (`example.com`) drove two targeted fixes
    lookup. The deferred Download analyzer can't start until the parallel phase's long pole
    finishes, so shrinking WHOIS/DNS also pulls everything after it earlier.
 
+## Full code review & fixes (latest session, on `main`)
+A complete line-by-line review against the SlashNext feature set surfaced 2 critical +
+4 medium + 5 low issues; all fixed, criticals first. **119 tests / ruff / bandit green**;
+full scan pipeline re-verified end-to-end. Commits `eac2504..c55426c`.
+- 🔴 **SSL/TLS analyzer was inert on HTTPS** ([ssl_tls.py](src/iris/analyzers/ssl_tls.py)) —
+  it connected with `CERT_NONE` then read `getpeercert(binary_form=False)`, which returns an
+  **empty dict** when the peer cert isn't validated, so issuer / recently-issued / hostname-
+  mismatch / expiry all silently no-opped (a 15%-weight analyzer scoring 0, and the strong
+  "cert issued days ago" phishing signal lost). Subject-mismatch was doubly dead —
+  `ssl.match_hostname` was removed in Python 3.12+. Now parses the DER cert with
+  `cryptography.x509`; 10 network-free regression tests. `cryptography>=42` is now an explicit dep.
+- 🔴 **Stored XSS in the analyst report** ([web/app.py](src/iris/web/app.py)) — `report_json`
+  and `bulk_restore` were injected into `<script>` via `|safe` using `json.dumps`, which
+  leaves `</script>` intact. Attacker-controlled fields (download filename, classification
+  evidence, finding text) could break out and run JS in the analyst's authenticated session.
+  New `_json_script_safe()` escapes `< > &` + U+2028/9.
+- 🟠 SSRF hardening: DoH fallback refuses non-public results (`is_public_ip` in
+  [dns_util.py](src/iris/dns_util.py)); async webhook `callback_url` is validated through the
+  SSRF guard. 🟠 Response-body caps on the requests-based analyzers (HTTP streams headers-only;
+  page-content caps at 3 MB) to stop memory-exhaustion from hostile servers. 🟠 Auto-reload is
+  now opt-in (`--reload`/`IRIS_RELOAD=1`), not the prod default.
+- 🟡 KQL-injection escaping in generated hunting queries; punycode/IDN (`xn--`) homograph
+  detection; encoded-command classifier no longer false-positives on lone base64 blobs; **Safe**
+  confidence now scales with evidence completeness; session-cookie `Secure` flag configurable
+  (`auth.cookie_secure`). New `tests/unit/test_review_fixes.py` + `test_ssl_tls.py`.
+- **SlashNext parity gaps still open** (not bugs): no QR-code / nested-link (obfuscation)
+  detection; URL reputation leans on VirusTotal lookups (no active submission), so true
+  zero-hour URLs have no VT data — the browser detonation partly compensates.
+
 ## Open / pending (next-session candidates, roughly prioritized)
 - **#6 API auth** ✅ **DONE** — OIDC SSO (analysts) + bearer service tokens (agent) gate every
   page/`/api/*`/`/stream`/`/screenshots`; SSRF guard + rate limiting + secure headers + CI
@@ -181,6 +210,8 @@ Per-analyzer profiling of a single scan (`example.com`) drove two targeted fixes
   per-user RBAC; reverse-proxy the noVNC :6080 behind the app session (currently view_url is
   only handed to authenticated sessions, but :6080 itself is VNC-password-gated only);
   HMAC-signed webhooks; CSP nonces (drop `unsafe-inline`); non-root browser container.
+  *(The review pass landed webhook `callback_url` SSRF validation and a configurable
+  `auth.cookie_secure`; HMAC signing / CSP nonces / non-root / RBAC still open.)*
 - **#2 in-browser CAPTCHA solve** ✅ **v1 DONE + Docker-verified** (see section above):
   transparent noVNC takeover, behind `interactive.enabled`. Verified end-to-end in the
   container — scanning the reCAPTCHA demo with `human_present` fired `action_required` +

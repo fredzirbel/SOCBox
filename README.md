@@ -19,7 +19,9 @@ IRIS scans URLs across 8 security dimensions simultaneously — lexical analysis
 - **8 Security Analyzers** running concurrently across URL, network, and content layers
 - **3-Tier Scoring** — Safe / Uncertain / Malicious with weighted confidence percentages
 - **Real-time SSE Streaming** — results appear progressively as each analyzer completes
-- **Bulk Scanning** — scan up to 50 URLs concurrently (3 parallel workers) with progress tracking
+- **In-Browser CAPTCHA Solving** — pauses on an un-automatable CAPTCHA and surfaces the live detonation browser to the analyst (CLI on-screen, or transparent self-hosted noVNC takeover in the web UI); clearance is captured once and replayed across the scan
+- **Authenticated & Hardened** — OIDC SSO for analysts + bearer service tokens for the agent, an SSRF guard, and rate limiting (see [Security](#security--hardening))
+- **Bulk Scanning** — scan many URLs concurrently (up to 8 parallel workers, default 5) with progress tracking
 - **REST API** — synchronous and async JSON endpoints for SOAR playbook integration
 - **Defanged IOC Display** — all URLs rendered as `hxxps://example[.]com` for safe sharing
 - **Copy Report** — one-click clipboard export of full reports; per-field copy buttons for IOCs
@@ -79,11 +81,11 @@ docker run -p 8080:8000 --shm-size=2g \
 | Analyzer | Weight | What It Checks |
 |----------|--------|----------------|
 | **URL Lexical Analysis** | 20 | Domain age indicators, typosquatting (Levenshtein distance), suspicious TLDs, URL shorteners, excessive subdomains, IP-based URLs, homoglyph characters |
-| **WHOIS/DNS Inspection** | 15 | Domain registration age, registrar reputation, missing WHOIS privacy, PTR records, nameserver anomalies |
+| **WHOIS/DNS Inspection** | 15 | Domain registration age, registrar privacy/proxy use, whether the domain resolves (NXDOMAIN), missing MX (email) records |
 | **HTTP Response Analysis** | 15 | Redirect chains, missing security headers (CSP, X-Frame-Options), suspicious status codes, cross-domain redirects |
 | **Page Content Analysis** | 15 | Login form detection, brand impersonation keywords, hidden form fields, credential harvesting patterns |
 | **Download Analysis** | 15 | Detects auto-downloads, flags suspicious file extensions, computes SHA-1 and SHA-256, queries VirusTotal for file reputation |
-| **SSL/TLS Certificate** | 10 | Certificate validity, issuer trust, self-signed detection, expiration, SAN mismatch |
+| **SSL/TLS Certificate** | 10 | Free-CA certificate on a brand-impersonating domain, very recently issued certs, SAN/hostname mismatch, expired certificates (cert parsed from DER so it works even when validation would fail) |
 | **Link Discovery** | 10 | Clicks auth-related buttons on the page, inspects destination for credential forms, cross-domain redirects, and brand spoofing |
 | **Threat Feed Integration** | 0 | Queries VirusTotal, Google Safe Browsing, and AbuseIPDB for findings display; feed impact is scored via blended threat-feed signal below |
 
@@ -101,11 +103,23 @@ Threat feeds contribute once through the blended feed signal (not double-counted
 
 Special categories exist for file download threats: **Malicious File Download** and **Suspicious File Download**.
 
-**Confidence** is tuned for SOC analyst clarity: Malicious and Safe verdicts report **100% confidence**, while Uncertain scales **30–80%** on a U-curve (higher near decision boundaries, lowest in the ambiguous middle).
+**Confidence** is tuned for SOC analyst clarity: Malicious verdicts report **100% confidence**; a **Safe** verdict scales with how much evidence was gathered (a full scan → 100%, but a thin scan where the site was unreachable and only lexical analysis ran → lower, so a green verdict built on sparse data is visibly less certain); **Uncertain** scales **30–80%** on a U-curve (higher near decision boundaries, lowest in the ambiguous middle).
 
 **Feed floor enforcement** prevents strong VirusTotal signals from being diluted into "Safe" when other feeds (GSB, AbuseIPDB) haven't indexed the campaign yet. For example, 10+ VT detections enforce a minimum composite score of 65 (Malicious).
 
 Threat feed matches are weighted individually (VirusTotal 40%, Google Safe Browsing 35%, AbuseIPDB 25%) and blended with analyzer evidence.
+
+## Security & Hardening
+
+IRIS fetches attacker-controlled URLs server-side and renders their content back to analysts, so it is built to sit safely inside a SOC:
+
+- **Authentication** — analysts sign in via **OIDC SSO** (Azure AD / Okta); the AI triage agent / SOAR authenticates with **bearer service tokens**. A fail-closed, SSE-safe ASGI middleware gates every page, `/api/*`, `/stream`, and `/screenshots`. `auth.mode` ∈ {`oidc`, `dev`, `disabled`}; `dev` auto-login requires `IRIS_AUTH_DEV=1`.
+- **SSRF guard** — every scan target is resolved and rejected if it lands on a private / loopback / link-local / cloud-metadata address. The DoH resolution fallback and the async webhook `callback_url` are held to the same check, so neither can be used to reach internal services.
+- **Rate limiting** — scan endpoints are capped per service token / client IP.
+- **XSS-safe reporting** — the analyst-facing report is rendered safely even when the scanned page's own content (filenames, page text, evidence) is hostile.
+- **Secure headers** — CSP, `X-Frame-Options`, `nosniff`, and `Referrer-Policy` on every response.
+- **Secrets via env only** — `IRIS_SESSION_SECRET`, `IRIS_OIDC_CLIENT_SECRET`, `IRIS_API_TOKENS`; never committed.
+- **CI** — `ruff`, `bandit`, `pip-audit`, and `gitleaks` run on every change.
 
 ## Architecture
 
@@ -137,7 +151,7 @@ Threat feed matches are weighted individually (VirusTotal 40%, Google Safe Brows
 - **Thread pool analyzers** run concurrently (network I/O bound)
 - **Playwright analyzers** run sequentially on a dedicated thread (browser-bound)
 - **Deferred analyzers** get a browser fallback pass after the thread pool finishes
-- **Thread-local browser pool** — each of 3 scan worker threads maintains its own persistent Playwright/Chromium instance, enabling concurrent scans while avoiding greenlet conflicts
+- **Thread-local browser pool** — each scan worker thread (up to 8, default 5) maintains its own persistent Playwright/Chromium instance, enabling concurrent scans while avoiding greenlet conflicts
 - **Screenshots** are captured immediately after page content analysis while the page is fresh
 
 ## OSINT Links
@@ -320,6 +334,7 @@ pre-commit run --all-files
 ## Tech Stack
 
 - **Backend:** Python 3.11, FastAPI, Uvicorn
+- **Auth & Crypto:** Authlib (OIDC), itsdangerous (signed sessions), cryptography (certificate parsing), slowapi (rate limiting)
 - **Browser Automation:** Playwright (Chromium)
 - **Frontend:** Jinja2 templates, vanilla JS, CSS (dark theme)
 - **Streaming:** Server-Sent Events (SSE)
