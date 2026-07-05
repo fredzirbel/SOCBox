@@ -343,7 +343,12 @@ def _calculate_confidence(
         return 100.0
 
     if category == RiskCategory.SAFE:
-        return 100.0
+        # A "Safe" verdict is only as trustworthy as the evidence behind it.
+        # A full scan (most of the 8 analyzers completed) → high confidence; a
+        # thin scan (e.g. the site was down and only lexical ran) → lower
+        # confidence, signalling the analyst to look closer rather than trusting
+        # a green verdict built on almost no data.
+        return round(min(100.0, 40.0 + 8.0 * len(completed)), 1)
 
     # --- UNCERTAIN zone: scale 30-80% based on evidence strength ---
     safe_max = thresholds.get("safe", 25)

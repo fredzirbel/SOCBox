@@ -34,7 +34,7 @@ _VERIFY = (
     "confirm you are human", "complete the verification", "press the key combination",
 )
 
-# Encoded / obfuscated command markers.
+# Encoded / obfuscated command markers (strong — meaningful on their own).
 _ENCODED_PATTERNS = (
     r"powershell(\.exe)?\s+-e(nc|ncodedcommand)?\b",
     r"-enc\b",
@@ -43,8 +43,11 @@ _ENCODED_PATTERNS = (
     r"\bmshta\b",
     r"certutil\s+(-|/)decode",
     r"-w(indowstyle)?\s+hidden",
-    r"[A-Za-z0-9+/]{160,}={0,2}",  # long base64 blob
 )
+# A long base64 blob is only an *encoded command* signal alongside the strong
+# markers above (or a shell reference) — on its own it false-positives on inline
+# data-URIs, source maps, JWTs, and other legitimate long base64.
+_BASE64_BLOB = r"[A-Za-z0-9+/]{160,}={0,2}"
 
 # Fake browser/software update lures.
 _FAKE_UPDATE = (
@@ -133,6 +136,12 @@ def classify(
         if m:
             frag = m.group(0)
             enc_evidence.append(frag[:40] + ("…" if len(frag) > 40 else ""))
+    # Count a long base64 blob only when a shell/encoding context is present.
+    if enc_evidence or shell:
+        blob = re.search(_BASE64_BLOB, haystack)
+        if blob:
+            frag = blob.group(0)
+            enc_evidence.append(frag[:40] + "…")
     if enc_evidence:
         out.append(ThreatClassification(
             id="encoded_command",

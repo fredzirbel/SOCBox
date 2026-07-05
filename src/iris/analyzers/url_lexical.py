@@ -311,4 +311,17 @@ class URLLexicalAnalyzer(BaseAnalyzer):
                 score_contribution=30.0,
                 severity="high",
             )
+
+        # Punycode/IDN labels (xn--) are ASCII on the wire but render as
+        # non-ASCII in the browser — a common homograph vector the plain
+        # non-ASCII check above misses (e.g. xn--pple-43d.com → "аpple.com").
+        if any(label.startswith("xn--") for label in hostname.lower().split(".")):
+            return Finding(
+                description=(
+                    "Hostname uses punycode/IDN encoding (xn--), "
+                    "a possible homograph attack"
+                ),
+                score_contribution=30.0,
+                severity="high",
+            )
         return None

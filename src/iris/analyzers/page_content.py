@@ -15,6 +15,11 @@ from iris.models import AnalyzerResult, AnalyzerStatus, Finding
 
 logger = logging.getLogger(__name__)
 
+# Cap the HTML we pull from a (potentially hostile) server so a giant or
+# slow-drip body can't exhaust memory. Downstream page_text is capped at 200k
+# chars anyway, so 3 MB of markup is far more than analysis needs.
+_MAX_HTML_BYTES = 3 * 1024 * 1024
+
 
 class PageContentAnalyzer(BaseAnalyzer):
     """Analyze the HTML page content for phishing indicators.
@@ -52,25 +57,31 @@ class PageContentAnalyzer(BaseAnalyzer):
         self.scripts: list[str] = []
 
         try:
+            # stream=True + a capped read so a hostile server can't exhaust
+            # memory with an unbounded/slow-drip body.
             response = requests.get(
                 url,
                 headers={"User-Agent": user_agent},
                 timeout=timeout,
                 verify=verify_ssl,
+                stream=True,
             )
+            body_text = self._read_capped(response, _MAX_HTML_BYTES)
+            status_code = response.status_code
+            content_type = response.headers.get("Content-Type", "").lower()
+            response.close()
         except requests.exceptions.RequestException:
             response = None
             use_browser = True
 
         if response is not None:
-            blocked_finding = self._detect_security_block(response)
+            blocked_finding = self._detect_security_block(status_code, body_text)
             if blocked_finding is not None:
                 extra_findings.append(blocked_finding)
                 use_browser = True
-            elif response.status_code >= 400:
+            elif status_code >= 400:
                 use_browser = True
             else:
-                content_type = response.headers.get("Content-Type", "").lower()
                 if "text/html" not in content_type:
                     return AnalyzerResult(
                         analyzer_name=self.name,
@@ -85,7 +96,7 @@ class PageContentAnalyzer(BaseAnalyzer):
                             )
                         ],
                     )
-                html_text = response.text
+                html_text = body_text
 
         # Fallback: use a real browser to bypass Cloudflare / bot protection
         if use_browser:
@@ -156,29 +167,48 @@ class PageContentAnalyzer(BaseAnalyzer):
         )
 
     @staticmethod
-    def _detect_security_block(response: requests.Response) -> Finding | None:
+    def _read_capped(resp: requests.Response, max_bytes: int) -> str:
+        """Read at most *max_bytes* of the response body and decode to text.
+
+        Reads from the raw stream (decoding transfer/content-encoding) so an
+        oversized or slow-drip body is truncated rather than buffered whole.
+        """
+        try:
+            raw = resp.raw.read(max_bytes + 1, decode_content=True) or b""
+        except Exception:
+            return ""
+        raw = raw[:max_bytes]
+        encoding = resp.encoding or "utf-8"
+        try:
+            return raw.decode(encoding, errors="replace")
+        except (LookupError, TypeError):
+            return raw.decode("utf-8", errors="replace")
+
+    @staticmethod
+    def _detect_security_block(status_code: int, body_text: str) -> Finding | None:
         """Detect if the HTTP response is a security-provider phishing block.
 
         Checks for known interstitial pages from Cloudflare, Google Safe
         Browsing, and similar services that flag the URL as malicious.
 
         Args:
-            response: The HTTP response object.
+            status_code: The HTTP status code.
+            body_text: The (capped) response body text.
 
         Returns:
             A Finding if a security block was detected, otherwise None.
         """
-        if response.status_code not in (403, 503):
+        if status_code not in (403, 503):
             return None
 
-        body = response.text.lower()
+        body = body_text.lower()
 
         # Cloudflare phishing/malware block
         if "suspected phishing" in body and "cloudflare" in body:
             return Finding(
                 description=(
                     "Cloudflare blocked this page as suspected phishing "
-                    f"(HTTP {response.status_code})"
+                    f"(HTTP {status_code})"
                 ),
                 score_contribution=30.0,
                 severity="high",
@@ -187,7 +217,7 @@ class PageContentAnalyzer(BaseAnalyzer):
             return Finding(
                 description=(
                     "Cloudflare blocked this page as suspected malware "
-                    f"(HTTP {response.status_code})"
+                    f"(HTTP {status_code})"
                 ),
                 score_contribution=30.0,
                 severity="high",
@@ -199,7 +229,7 @@ class PageContentAnalyzer(BaseAnalyzer):
                 return Finding(
                     description=(
                         "Cloudflare security block detected — page flagged "
-                        f"as dangerous (HTTP {response.status_code})"
+                        f"as dangerous (HTTP {status_code})"
                     ),
                     score_contribution=25.0,
                     severity="high",
@@ -210,7 +240,7 @@ class PageContentAnalyzer(BaseAnalyzer):
             return Finding(
                 description=(
                     "Browser/proxy blocked this page as deceptive "
-                    f"(HTTP {response.status_code})"
+                    f"(HTTP {status_code})"
                 ),
                 score_contribution=30.0,
                 severity="high",
