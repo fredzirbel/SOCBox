@@ -34,6 +34,7 @@ from starlette.responses import StreamingResponse
 
 from iris import store
 from iris.config import get_api_key, load_config
+from iris.enrich import enrich_ips
 from iris.feeds.virustotal import scanned_engine_total
 from iris.netguard import target_block_reason
 from iris.scanner import scan_url, shutdown_browser
@@ -1679,6 +1680,90 @@ async def api_bulk_get(bulk_id: str) -> JSONResponse:
             status_code=404,
         )
     return JSONResponse(bs)
+
+
+# ---------------------------------------------------------------------------
+# Analyst tools: IP enrichment
+# ---------------------------------------------------------------------------
+
+# Matches IPv4 and (loosely) IPv6 so an analyst can paste a raw alert blob.
+_IP_RE = re.compile(
+    r"\b(?:\d{1,3}\.){3}\d{1,3}\b"          # IPv4
+    r"|\b(?:[A-Fa-f0-9]{1,4}:){2,7}[A-Fa-f0-9]{1,4}\b",  # IPv6 (loose)
+)
+
+
+def _extract_ips(text: str) -> list[str]:
+    """Pull IP-looking tokens from a blob, refanging ``1[.]2[.]3[.]4`` first."""
+    refanged = (text or "").replace("[.]", ".").replace("[:]", ":")
+    return _IP_RE.findall(refanged)
+
+
+@app.get("/tools/ip", response_class=HTMLResponse)
+async def ip_enrich_page(request: Request) -> HTMLResponse:
+    """Render the multi-source IP enrichment tool."""
+    return templates.TemplateResponse(request, "ip_enrich.html", {})
+
+
+@app.post("/api/enrich/ip")
+@limiter.limit(_scan_rate_limit)
+async def api_enrich_ip(request: Request) -> JSONResponse:
+    """Enrich one or many IPs across VT / AbuseIPDB / IPinfo / MaxMind.
+
+    Accepts ``{"ips": [...]}``, ``{"ip": "..."}``, or ``{"text": "<blob>"}``
+    (IPs are extracted and refanged from the blob). Returns one result per
+    unique IP with live reputation/geo/ASN data and copyable OSINT links.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    ips: list[str] = []
+    if isinstance(body.get("ips"), list):
+        ips = [str(x) for x in body["ips"]]
+    elif body.get("ip"):
+        ips = [str(body["ip"])]
+    elif body.get("text"):
+        ips = _extract_ips(str(body["text"]))
+
+    if not ips:
+        return JSONResponse({"error": "No IPs provided"}, status_code=400)
+
+    loop = asyncio.get_event_loop()
+    results = await loop.run_in_executor(None, enrich_ips, ips, _config)
+    return JSONResponse({"count": len(results), "results": results})
+
+
+# ---------------------------------------------------------------------------
+# Analyst tools: KQL generator
+# ---------------------------------------------------------------------------
+
+@app.get("/tools/kql", response_class=HTMLResponse)
+async def kql_page(request: Request) -> HTMLResponse:
+    """Render the standalone KQL (Advanced Hunting) generator."""
+    return templates.TemplateResponse(request, "kql.html", {})
+
+
+@app.post("/api/tools/kql")
+async def api_kql_generate(request: Request) -> JSONResponse:
+    """Generate Defender/Sentinel KQL from pasted indicators (no scan required).
+
+    Accepts ``{"text": "<indicators>", "goal": "<optional hunt goal>"}``. Returns
+    the classified indicators, ready-to-paste queries, and a copy-ready Claude
+    prompt for freeform hunts.
+    """
+    from iris.web.kql import generate_from_text
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    text = str(body.get("text") or "").strip()
+    goal = str(body.get("goal") or "")
+    if not text:
+        return JSONResponse({"error": "No indicators provided"}, status_code=400)
+    return JSONResponse(generate_from_text(text, goal))
 
 
 # ---------------------------------------------------------------------------

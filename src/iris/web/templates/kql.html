@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}KQL Generator — IRIS{% endblock %}
+
+{% block content %}
+<style>
+  .tool-header h1 { font-family: var(--font-display); margin-bottom: .25rem; }
+  .tool-sub { color: var(--text-muted); margin-top: 0; max-width: 66ch; }
+  .tool-form textarea, .tool-form input[type=text] {
+    width: 100%; box-sizing: border-box; background: var(--bg-input); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius); padding: .55rem .8rem;
+    font-family: var(--font-body);
+  }
+  .tool-form textarea { resize: vertical; }
+  .tool-form label { display: block; font-size: .8rem; color: var(--text-muted); margin: .7rem 0 .25rem; }
+  .tool-actions { display: flex; align-items: center; gap: .8rem; margin: 1rem 0 1.2rem; }
+  .tool-form .btn-primary { background: var(--accent); color: var(--on-accent); border: none; cursor: pointer; padding: .5rem 1.2rem; border-radius: var(--radius); font-weight: 600; }
+  .tool-form .btn-primary:disabled { opacity: .6; cursor: default; }
+  .tool-status { color: var(--text-muted); font-size: .9rem; }
+  .btn-mini { background: transparent; color: var(--accent); border: 1px solid var(--border); border-radius: var(--radius); padding: .15rem .55rem; font-size: .8rem; cursor: pointer; }
+  .ind-summary { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem; }
+  .ind-chip { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 999px; padding: .2rem .7rem; font-size: .8rem; color: var(--text-muted); }
+  .ind-chip b { color: var(--text); }
+  .kql-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: .9rem 1rem; margin-bottom: 1rem; }
+  .kql-head { display: flex; align-items: center; gap: .7rem; margin-bottom: .3rem; }
+  .kql-name { font-weight: 700; }
+  .kql-plat { font-size: .65rem; text-transform: uppercase; letter-spacing: .05em; border: 1px solid var(--border); border-radius: 999px; padding: .1rem .5rem; color: var(--text-muted); }
+  .kql-copy { margin-left: auto; }
+  .kql-desc { color: var(--text-muted); font-size: .85rem; margin: 0 0 .5rem; }
+  .kql-code { background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius); padding: .7rem .8rem; margin: 0; overflow-x: auto; font-size: .82rem; white-space: pre; }
+  .claude-box { background: var(--bg-card); border: 1px dashed var(--border); border-radius: var(--radius-lg); padding: 1rem; margin-top: 1.4rem; }
+  .claude-box h3 { margin: 0 0 .3rem; font-family: var(--font-display); }
+  .claude-box p { color: var(--text-muted); font-size: .85rem; margin: 0 0 .6rem; }
+  .muted { color: var(--text-muted); }
+</style>
+
+<section class="tool-header">
+  <h1>KQL Generator</h1>
+  <p class="tool-sub">
+    Paste indicators (IPs, domains, URLs, file hashes, sender/UPN emails — mixed and defanged is fine).
+    IRIS classifies them and builds ready-to-paste Defender XDR / Sentinel Advanced Hunting queries.
+    For a bespoke hunt, use the Claude prompt at the bottom in your own Claude seat.
+  </p>
+</section>
+
+<form id="kql-form" class="tool-form" autocomplete="off">
+  <label for="kql-input">Indicators</label>
+  <textarea id="kql-input" rows="4" spellcheck="false"
+            placeholder="45[.]134[.]26[.]7, evil-login[.]com, https://bad.example/x, sender@phish.tld,&#10;e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"></textarea>
+  <label for="kql-goal">Hunt goal (optional — used for the Claude prompt)</label>
+  <input type="text" id="kql-goal" placeholder="e.g. find lateral movement from any host that contacted these IPs">
+  <div class="tool-actions">
+    <button type="submit" class="btn-primary" id="kql-go">Generate</button>
+    <span id="kql-status" class="tool-status"></span>
+  </div>
+</form>
+
+<div id="kql-indicators" class="ind-summary"></div>
+<div id="kql-results"></div>
+<div id="kql-claude"></div>
+
+<script>
+(function () {
+  "use strict";
+  function esc(s) { var el = document.createElement("span"); el.textContent = (s == null ? "" : String(s)); return el.innerHTML; }
+
+  var labels = { ips: "IPs", domains: "Domains", urls: "URLs", sha256: "SHA256", sha1: "SHA1", md5: "MD5", emails: "Emails" };
+
+  function indicatorChips(ind) {
+    var chips = "";
+    Object.keys(labels).forEach(function (k) {
+      var n = (ind[k] || []).length;
+      if (n) chips += '<span class="ind-chip"><b>' + n + "</b> " + esc(labels[k]) + "</span>";
+    });
+    return chips;
+  }
+
+  function queryCard(q) {
+    return '<div class="kql-card">' +
+      '<div class="kql-head"><span class="kql-name">' + esc(q.name) + "</span>" +
+      '<span class="kql-plat">' + esc(q.platform) + "</span>" +
+      '<button type="button" class="btn-mini kql-copy" data-q="' + esc(q.query).replace(/"/g, "&quot;") + '">Copy</button></div>' +
+      '<p class="kql-desc">' + esc(q.description) + "</p>" +
+      '<pre class="kql-code">' + esc(q.query) + "</pre></div>";
+  }
+
+  var claudePrompt = "";
+  var form = document.getElementById("kql-form");
+  var input = document.getElementById("kql-input");
+  var goal = document.getElementById("kql-goal");
+  var status = document.getElementById("kql-status");
+  var indBox = document.getElementById("kql-indicators");
+  var out = document.getElementById("kql-results");
+  var claudeBox = document.getElementById("kql-claude");
+  var btn = document.getElementById("kql-go");
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var text = input.value.trim();
+    if (!text) return;
+    btn.disabled = true; status.textContent = "Generating…";
+    indBox.innerHTML = ""; out.innerHTML = ""; claudeBox.innerHTML = "";
+    fetch("/api/tools/kql", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text, goal: goal.value }),
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      btn.disabled = false;
+      if (d.error) { status.textContent = "Error: " + d.error; return; }
+      var queries = d.queries || [];
+      status.textContent = queries.length + " quer" + (queries.length === 1 ? "y" : "ies");
+      indBox.innerHTML = indicatorChips(d.indicators || {});
+      out.innerHTML = queries.length
+        ? queries.map(queryCard).join("")
+        : '<p class="muted">No recognizable indicators found.</p>';
+      claudePrompt = d.claude_prompt || "";
+      claudeBox.innerHTML =
+        '<div class="claude-box"><h3>Freeform hunt via Claude</h3>' +
+        '<p>Copy this into your own Claude seat for a bespoke query — nothing is sent from IRIS.</p>' +
+        '<button type="button" class="btn-mini" id="copy-claude">Copy Claude prompt</button></div>';
+    }).catch(function () { btn.disabled = false; status.textContent = "Request failed"; });
+  });
+
+  document.addEventListener("click", function (e) {
+    var c = e.target.closest && e.target.closest(".kql-copy");
+    if (c) {
+      navigator.clipboard.writeText(c.getAttribute("data-q") || "").then(function () {
+        c.textContent = "Copied!"; setTimeout(function () { c.textContent = "Copy"; }, 1500);
+      }).catch(function () {});
+      return;
+    }
+    if (e.target.id === "copy-claude") {
+      navigator.clipboard.writeText(claudePrompt).then(function () {
+        e.target.textContent = "Copied!"; setTimeout(function () { e.target.textContent = "Copy Claude prompt"; }, 1500);
+      }).catch(function () {});
+    }
+  });
+})();
+</script>
+{% endblock %}
