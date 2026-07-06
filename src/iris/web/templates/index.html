@@ -3,6 +3,27 @@
 {% block title %}IRIS &mdash; Scan a URL{% endblock %}
 
 {% block content %}
+<style>
+  .tools { margin: 2.5rem 0 1rem; }
+  .tools h2 { font-family: var(--font-display); margin-bottom: 1rem; }
+  .tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
+  .tool-card {
+    display: block; text-decoration: none; color: var(--text);
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 1rem 1.1rem;
+    transition: border-color var(--transition), transform var(--transition);
+  }
+  a.tool-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .tool-card.disabled { opacity: .55; cursor: default; }
+  .tool-card .tc-top { display: flex; align-items: center; gap: .6rem; margin-bottom: .4rem; }
+  .tool-card .tc-icon { font-size: 1.35rem; line-height: 1; }
+  .tool-card .tc-name { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; }
+  .tool-card .tc-desc { color: var(--text-muted); font-size: .85rem; margin: 0; }
+  .tool-card .tc-soon {
+    margin-left: auto; font-size: .65rem; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--text-muted); border: 1px solid var(--border); border-radius: 999px; padding: .1rem .5rem;
+  }
+</style>
 <section class="hero">
     <h1>Scan a URL</h1>
     <p>Paste a URL below to analyze it across multiple security dimensions.</p>
@@ -24,10 +45,34 @@
         <p>Scanning&hellip; this may take a moment.</p>
     </div>
 
-    <div class="bulk-cta">
-        <span class="bulk-cta-text">Have multiple URLs?</span>
-        <a href="/bulk" class="btn btn-secondary btn-bulk-cta">Bulk Scan</a>
-    </div>
+</section>
+
+<section class="tools">
+  <h2>Analyst Tools</h2>
+  <div class="tool-grid">
+    <a class="tool-card" href="/bulk">
+      <div class="tc-top"><span class="tc-icon">🗂️</span><span class="tc-name">Bulk Scan</span></div>
+      <p class="tc-desc">Scan many URLs at once, or import live feeds from URLhaus / OpenPhish.</p>
+    </a>
+    <a class="tool-card" href="/tools/ip">
+      <div class="tc-top"><span class="tc-icon">🌐</span><span class="tc-name">IP Enrichment</span></div>
+      <p class="tc-desc">Live VirusTotal, AbuseIPDB, IPinfo &amp; MaxMind lookups with copyable OSINT links.</p>
+    </a>
+    <a class="tool-card" href="/tools/kql">
+      <div class="tc-top"><span class="tc-icon">🔎</span><span class="tc-name">KQL Generator</span></div>
+      <p class="tc-desc">Build Defender / Sentinel Advanced Hunting queries from any indicator.</p>
+    </a>
+    <span class="tool-card disabled">
+      <div class="tc-top"><span class="tc-icon">🧬</span><span class="tc-name">Command Deobfuscator</span>
+        <span class="tc-soon">Soon</span></div>
+      <p class="tc-desc">Decode PowerShell / base64 / hex one-liners and get a verdict.</p>
+    </span>
+    <span class="tool-card disabled">
+      <div class="tc-top"><span class="tc-icon">📧</span><span class="tc-name">Email Header Analyzer</span>
+        <span class="tc-soon">Soon</span></div>
+      <p class="tc-desc">Parse SPF / DKIM / DMARC, hops &amp; spoofing; pivot URLs into a scan.</p>
+    </span>
+  </div>
 </section>
 
 {% if recent_scans %}

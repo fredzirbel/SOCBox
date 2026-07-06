@@ -20,6 +20,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700&family=Saira+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css?v={{ static_v }}">
+    <style>
+        .nav-right .nav-link {
+            color: var(--text-muted); text-decoration: none; font-weight: 600;
+            font-size: .9rem; padding: .3rem .1rem; transition: color var(--transition);
+        }
+        .nav-right .nav-link:hover { color: var(--accent); }
+    </style>
 </head>
 <body>
     <nav class="navbar">
@@ -31,6 +38,10 @@
             </span>
         </a>
         <div class="nav-right">
+            <a href="/" class="nav-link">Scan</a>
+            <a href="/bulk" class="nav-link">Bulk</a>
+            <a href="/tools/ip" class="nav-link">IP Enrich</a>
+            <a href="/tools/kql" class="nav-link">KQL</a>
             <span class="nav-tagline">Intelligent Risk Inspection System</span>
             <button id="theme-toggle" class="theme-toggle" type="button"
                     aria-label="Toggle light and dark theme" title="Toggle theme">
