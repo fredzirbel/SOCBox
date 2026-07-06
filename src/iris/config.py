@@ -15,6 +15,7 @@ _ENV_KEY_MAP: dict[str, str] = {
     "PHISHTANK_API_KEY": "phishtank",
     "URLHAUS_API_KEY": "urlhaus",
     "ABUSEIPDB_API_KEY": "abuseipdb",
+    "IPINFO_API_KEY": "ipinfo",
 }
 
 _EXPECTED_SCORING_WEIGHT_KEYS = {

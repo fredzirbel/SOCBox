@@ -8,6 +8,9 @@ api_keys:
   # abuse.ch Auth-Key (free, from https://auth.abuse.ch) — used by `iris-feeds`
   # to pull recent URLhaus URLs via the official API instead of scraping.
   urlhaus: ""
+  # IPinfo token (free tier, from https://ipinfo.io) — used by the IP enricher
+  # for ASN/org/geo. Enrichment still runs (with less detail) without it.
+  ipinfo: ""
 
 # Completion webhook for async scans (POST /api/v1/scan/async). Leave webhook_url
 # empty to disable; a per-request callback_url overrides it.
