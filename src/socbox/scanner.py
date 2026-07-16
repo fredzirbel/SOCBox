@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 # Signature: on_event(event_type: str, data: dict) -> None
 EventCallback = Callable[[str, dict], None] | None
 
-# Analyzers that need a Playwright browser — must run on the Playwright thread.
+# Analyzers that need a Playwright browser - must run on the Playwright thread.
 _BROWSER_ANALYZERS = {
     "Page Content Analysis",
     "Link Discovery Analysis",
@@ -99,7 +99,7 @@ def _get_browser(url: str, interactive: bool = False) -> tuple[Playwright, Brows
     # placement) in at launch and cannot change either afterwards. A browser
     # cached for an earlier URL therefore carries that URL's DNS override (or
     # none), which makes it unable to reach a new domain that needs a different
-    # DoH-resolved MAP rule — exactly the phishing domains this tool exists to
+    # DoH-resolved MAP rule - exactly the phishing domains this tool exists to
     # analyse. Relaunch when the required rule, or the interactive mode, differs
     # from what the cached browser was launched with.
     required_rule = compute_host_resolver_rule(url)
@@ -117,7 +117,7 @@ def _get_browser(url: str, interactive: bool = False) -> tuple[Playwright, Brows
             pw = browser = None
         else:
             try:
-                # Health check — access a property to see if the browser is alive
+                # Health check - access a property to see if the browser is alive
                 _ = browser.contexts
                 return pw, browser
             except Exception:
@@ -231,7 +231,7 @@ def scan_url(
     browser-dependent analyzers share a single Playwright browser and
     run sequentially (Playwright's sync API is greenlet-bound).
 
-    The browser is **persistent** across scans — it is created on the
+    The browser is **persistent** across scans - it is created on the
     first call and reused thereafter, eliminating 2-5 seconds of launch
     overhead per scan.
 
@@ -246,7 +246,7 @@ def scan_url(
             local single-scan use.
         human_present: If True, an analyst is watching this scan in the web UI
             and can solve an un-automatable CAPTCHA live via the noVNC takeover.
-            Set only for single interactive web scans — never for bulk, agent,
+            Set only for single interactive web scans - never for bulk, agent,
             or async scans, which must not block on a human.
 
     Returns:
@@ -359,7 +359,7 @@ def scan_url(
         analyzer_results, scan_meta["feed_results"], config,
     )
 
-    # Override generic labels when the primary threat is a file download —
+    # Override generic labels when the primary threat is a file download -
     # "Malicious File Download" or "Suspicious File Download" is more
     # accurate than "Malicious" for payload-delivery URLs.
     file_dl = scan_meta.get("file_download")
@@ -378,7 +378,7 @@ def scan_url(
             ).get("malicious", 60)
             overall_score = max(overall_score, float(malicious_min))
         else:
-            # Download detected but no VT hits on the file — suspicious.
+            # Download detected but no VT hits on the file - suspicious.
             risk_category = RiskCategory.SUSPICIOUS_DOWNLOAD
             safe_max = config.get("scoring", {}).get(
                 "thresholds", {},
@@ -405,7 +405,7 @@ def scan_url(
     recommendation = _build_recommendation(risk_category)
 
     # Classify attack techniques (ClickFix, encoded command, phishing, ...).
-    # Orthogonal to the risk verdict — a URL may carry several, or none.
+    # Orthogonal to the risk verdict - a URL may carry several, or none.
     classifications = classify(
         url=url,
         page_text=scan_meta.get("page_text", ""),
@@ -557,7 +557,7 @@ def _run_all_analyzers(
             _emit(on_event, "analyzer", {"result": _serialize_result(ba_result)})
 
             # After the first browser analyzer (Page Content), capture
-            # the screenshot while the page state is fresh — before
+            # the screenshot while the page state is fresh - before
             # Link Discovery clicks around and changes the page.
             if i == 0 and screenshot_dir and not passive_only:
                 try:

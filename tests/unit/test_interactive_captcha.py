@@ -173,7 +173,7 @@ def test_create_context_replays_solved_state_without_interactive() -> None:
     """Clearance is replayed whenever it exists, not only in CLI interactive mode.
 
     The web noVNC takeover solves a CAPTCHA on a separate headed session and
-    stashes the clearance for the *headless* scan to reuse — so replay must not
+    stashes the clearance for the *headless* scan to reuse - so replay must not
     be gated on interactive mode. Cross-scan isolation comes from
     reset_solved_state() at scan start, not from the interactive flag.
     """

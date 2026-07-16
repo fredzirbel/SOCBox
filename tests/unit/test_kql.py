@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from socbox.web.kql import (
     classify_indicators,
-    claude_prompt,
     generate,
     generate_from_text,
 )
@@ -57,16 +56,8 @@ def test_kql_injection_escaped():
     assert '\\"' in blob and 'evil.com" or true' not in blob
 
 
-def test_claude_prompt_includes_indicators_and_goal():
-    ind = classify_indicators("1.2.3.4 evil.com")
-    prompt = claude_prompt(ind, "find beaconing")
-    assert "1.2.3.4" in prompt and "evil.com" in prompt
-    assert "find beaconing" in prompt
-    assert "Advanced Hunting" in prompt
-
-
 def test_generate_from_text_wraps_everything():
-    out = generate_from_text("8.8.8.8", "test goal")
-    assert set(out) == {"indicators", "queries", "claude_prompt"}
+    out = generate_from_text("8.8.8.8")
+    assert set(out) == {"indicators", "queries"}
     assert out["indicators"]["ips"] == ["8.8.8.8"]
-    assert out["queries"] and "test goal" in out["claude_prompt"]
+    assert out["queries"]

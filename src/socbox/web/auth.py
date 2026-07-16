@@ -5,16 +5,16 @@ authenticates with a **bearer service token**. Every page, ``/api/*``,
 ``/stream`` (SSE), and ``/screenshots`` requires a valid signed-session cookie
 **or** a valid service token.
 
-The SSE-heavy UI is why we accept a session cookie at all — ``EventSource``
+The SSE-heavy UI is why we accept a session cookie at all - ``EventSource``
 can't send an ``Authorization`` header, but the browser sends the cookie
 automatically same-origin.
 
 Modes (``auth.mode``):
-- ``oidc``     — production SSO (requires discovery_url / client_id / secret /
+- ``oidc``     - production SSO (requires discovery_url / client_id / secret /
                  session_secret, supplied via env; the server refuses to start
                  otherwise).
-- ``dev``      — INSECURE auto-login for local testing (gated by SOCBOX_AUTH_DEV=1).
-- ``disabled`` — no auth (air-gapped use only).
+- ``dev``      - INSECURE auto-login for local testing (gated by SOCBOX_AUTH_DEV=1).
+- ``disabled`` - no auth (air-gapped use only).
 
 The enforcer is a **pure-ASGI** middleware (not BaseHTTPMiddleware) so it never
 buffers responses and stays compatible with the SSE streams.
@@ -100,7 +100,7 @@ def current_user(request: Request) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# Enforcement middleware (pure ASGI — SSE-safe)
+# Enforcement middleware (pure ASGI - SSE-safe)
 # ---------------------------------------------------------------------------
 
 class AuthMiddleware:
@@ -148,7 +148,7 @@ class AuthMiddleware:
 def init_auth(app: Any, config: dict[str, Any]) -> None:
     """Wire session + auth middleware, OIDC client, and the auth routes.
 
-    Safe to call at import time — never raises. Hard fail-closed validation for
+    Safe to call at import time - never raises. Hard fail-closed validation for
     a misconfigured OIDC deployment happens in ``verify_auth_or_exit`` at server
     startup, so the CLI and tests (which only import the app) load cleanly.
     """
@@ -196,7 +196,7 @@ def _register_routes(app: Any) -> None:
     @app.get("/login")
     async def login(request: Request) -> Any:
         if effective_mode(_cfg) != "oidc" or _oauth is None:
-            # dev/disabled (or misconfigured oidc) — nothing to redirect to.
+            # dev/disabled (or misconfigured oidc) - nothing to redirect to.
             return RedirectResponse(url="/")
         oidc = _auth(_cfg).get("oidc", {})
         redirect_uri = oidc.get("redirect_url") or str(request.url_for("auth_callback"))
@@ -221,7 +221,7 @@ def _register_routes(app: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Security headers (pure ASGI — SSE-safe)
+# Security headers (pure ASGI - SSE-safe)
 # ---------------------------------------------------------------------------
 
 def _novnc_origin(config: dict[str, Any]) -> str:
@@ -287,7 +287,7 @@ def verify_auth_or_exit(config: dict[str, Any]) -> None:
         missing = oidc_missing(config)
         if missing:
             logger.critical(
-                "auth.mode=oidc but missing required config: %s — refusing to start. "
+                "auth.mode=oidc but missing required config: %s - refusing to start. "
                 "Set them via env (SOCBOX_OIDC_CLIENT_SECRET, SOCBOX_SESSION_SECRET, …) "
                 "or use SOCBOX_AUTH_DEV=1 for local testing.",
                 ", ".join(missing),
@@ -295,9 +295,9 @@ def verify_auth_or_exit(config: dict[str, Any]) -> None:
             sys.exit(1)
         logger.info("Auth: OIDC SSO enabled.")
     elif mode == "dev":
-        logger.warning("⚠ Auth in DEV mode — auto-login enabled. NOT for production.")
+        logger.warning("⚠ Auth in DEV mode - auto-login enabled. NOT for production.")
     elif mode == "disabled":
-        logger.warning("⚠ Auth DISABLED — all endpoints are open (air-gapped use only).")
+        logger.warning("⚠ Auth DISABLED - all endpoints are open (air-gapped use only).")
     else:
-        logger.critical("Unknown auth.mode=%r — refusing to start.", mode)
+        logger.critical("Unknown auth.mode=%r - refusing to start.", mode)
         sys.exit(1)

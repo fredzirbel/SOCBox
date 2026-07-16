@@ -228,8 +228,8 @@ def detect_interactive_captcha(page: Page) -> str:
     """Return the provider name of a *rendered* CAPTCHA widget, or ``""``.
 
     Matches any iframe whose src belongs to a known provider (checkbox/anchor
-    or image-challenge frame) and that is actually rendered. Hidden frames —
-    e.g. the reCAPTCHA image-challenge frame before it is shown — report a
+    or image-challenge frame) and that is actually rendered. Hidden frames -
+    e.g. the reCAPTCHA image-challenge frame before it is shown - report a
     zero-size bounding box and are skipped, so this fires on a visible gate
     rather than on dormant markup.
 
@@ -312,7 +312,7 @@ def wait_for_manual_captcha_solve(page: Page, provider: str) -> bool:
     """Pause the scan while the operator solves a CAPTCHA in the browser window.
 
     CLI path. With an interactive terminal, blocks until the operator presses
-    Enter — reliable across every CAPTCHA type (the checkbox widget stays on the
+    Enter - reliable across every CAPTCHA type (the checkbox widget stays on the
     page after solving, so waiting for it to "disappear" does not work). Without
     a terminal, falls back to polling for a solved response token. The web UI
     uses ``remote_takeover_solve`` instead, never this function's TTY branch.
@@ -325,7 +325,7 @@ def wait_for_manual_captcha_solve(page: Page, provider: str) -> bool:
         True if the operator confirmed / a solved token appeared, False on
         timeout in the no-terminal fallback.
     """
-    logger.warning("Interactive %s CAPTCHA detected — pausing for manual solve", provider)
+    logger.warning("Interactive %s CAPTCHA detected - pausing for manual solve", provider)
     print(
         f"\n[SOC Box] {provider} CAPTCHA detected in the browser window.",
         flush=True,
@@ -334,12 +334,12 @@ def wait_for_manual_captcha_solve(page: Page, provider: str) -> bool:
     if sys.stdin is not None and sys.stdin.isatty():
         try:
             input("[SOC Box] Solve it in the window, then press Enter here to continue… ")
-            logger.info("Operator confirmed CAPTCHA solve — resuming")
+            logger.info("Operator confirmed CAPTCHA solve - resuming")
             _stash_solved_state(page)
             print("[SOC Box] Resuming analysis.\n", flush=True)
             return True
         except EOFError:
-            pass  # No usable stdin after all — fall through to token polling.
+            pass  # No usable stdin after all - fall through to token polling.
 
     timeout_s = _CAPTCHA_SOLVE_TIMEOUT_MS // 1000
     print(
@@ -348,13 +348,13 @@ def wait_for_manual_captcha_solve(page: Page, provider: str) -> bool:
         flush=True,
     )
     if _poll_for_solve(page, _CAPTCHA_SOLVE_TIMEOUT_MS):
-        logger.info("Solved CAPTCHA token detected — resuming")
+        logger.info("Solved CAPTCHA token detected - resuming")
         _stash_solved_state(page)
-        print("[SOC Box] CAPTCHA solved — resuming analysis.\n", flush=True)
+        print("[SOC Box] CAPTCHA solved - resuming analysis.\n", flush=True)
         return True
 
-    logger.warning("CAPTCHA not solved within %ds — continuing", timeout_s)
-    print("[SOC Box] Timed out waiting for CAPTCHA — continuing analysis.\n", flush=True)
+    logger.warning("CAPTCHA not solved within %ds - continuing", timeout_s)
+    print("[SOC Box] Timed out waiting for CAPTCHA - continuing analysis.\n", flush=True)
     return False
 
 
@@ -470,7 +470,7 @@ def remote_takeover_solve(
 
     if solved_state:
         _ctx_tls.solved_state = solved_state
-        logger.info("Takeover solved — clearance captured for %s", url)
+        logger.info("Takeover solved - clearance captured for %s", url)
         return True
     return False
 
@@ -562,8 +562,8 @@ def launch_browser(pw: Playwright, url: str, *, interactive: bool = False) -> Br
 def create_context(browser: Browser) -> BrowserContext:
     """Create a browser context with anti-fingerprinting protections.
 
-    If a CAPTCHA was already solved earlier in this scan — whether by the CLI
-    operator or via the web noVNC takeover — the captured clearance cookies are
+    If a CAPTCHA was already solved earlier in this scan - whether by the CLI
+    operator or via the web noVNC takeover - the captured clearance cookies are
     replayed into the new context so the same challenge is not presented again
     on later navigations.
 
@@ -594,7 +594,7 @@ def _simulate_human_behavior(page: Page) -> None:
     """Perform brief, bounded human-like interaction on the current page.
 
     Invisible / score-based challenges (reCAPTCHA v3, Cloudflare Turnstile in
-    managed mode) grade the session on behavioural signals — mouse movement,
+    managed mode) grade the session on behavioural signals - mouse movement,
     scrolling, and dwell time. A freshly-automated page with zero interaction
     scores poorly and is more likely to be challenged or blocked. This injects
     a few realistic mouse moves (with sub-steps), a small scroll down and
@@ -618,7 +618,7 @@ def _simulate_human_behavior(page: Page) -> None:
         page.wait_for_timeout(random.randint(200, 500))
         page.mouse.wheel(0, -random.randint(100, 300))
         page.wait_for_timeout(random.randint(150, 400))
-    except Exception as exc:  # noqa: BLE001 — behaviour sim must never break a scan
+    except Exception as exc:  # noqa: BLE001 - behaviour sim must never break a scan
         logger.debug("Human-behavior simulation skipped: %s", exc)
 
 

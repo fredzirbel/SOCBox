@@ -34,7 +34,7 @@ _VERIFY = (
     "confirm you are human", "complete the verification", "press the key combination",
 )
 
-# Encoded / obfuscated command markers (strong — meaningful on their own).
+# Encoded / obfuscated command markers (strong - meaningful on their own).
 _ENCODED_PATTERNS = (
     r"powershell(\.exe)?\s+-e(nc|ncodedcommand)?\b",
     r"-enc\b",
@@ -45,7 +45,7 @@ _ENCODED_PATTERNS = (
     r"-w(indowstyle)?\s+hidden",
 )
 # A long base64 blob is only an *encoded command* signal alongside the strong
-# markers above (or a shell reference) — on its own it false-positives on inline
+# markers above (or a shell reference) - on its own it false-positives on inline
 # data-URIs, source maps, JWTs, and other legitimate long base64.
 _BASE64_BLOB = r"[A-Za-z0-9+/]{160,}={0,2}"
 

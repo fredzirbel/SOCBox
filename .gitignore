@@ -17,3 +17,7 @@ config/local.yaml
 .coverage
 htmlcov/
 screenshots/
+
+# Internal roadmap/handoff docs - keep local only
+PROJECT.md
+ANALYST_TOOLS.md

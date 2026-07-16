@@ -16,7 +16,7 @@
         try {
             localStorage.setItem("socbox-theme", next);
         } catch (e) {
-            /* storage unavailable — theme still applies for this session */
+            /* storage unavailable - theme still applies for this session */
         }
     });
 })();

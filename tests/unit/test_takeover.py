@@ -1,7 +1,7 @@
 """Tests for the transparent noVNC CAPTCHA-solve takeover plumbing.
 
 Covers the two non-browser-bound pieces:
-  1. Per-scan, thread-local control state in ``socbox.browser`` — an interactive /
+  1. Per-scan, thread-local control state in ``socbox.browser`` - an interactive /
      human-present scan must not leak its mode onto a concurrent headless scan.
   2. The app-side noVNC session token + view_url helpers that gate the live
      viewer. (The headed/noVNC paths themselves are container-bound and covered
@@ -36,7 +36,7 @@ def test_human_present_is_thread_local() -> None:
 
     assert seen["worker_human"] is True
     assert seen["worker_interactive"] is True
-    # The main thread never opted in — it must still see the defaults.
+    # The main thread never opted in - it must still see the defaults.
     assert browser._human_present() is False
     assert browser._interactive_mode() is False
 

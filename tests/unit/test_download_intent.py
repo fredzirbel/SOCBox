@@ -24,7 +24,7 @@ class _FakePage:
 
 def test_download_intent_detected_on_cue():
     analyzer = DownloadAnalyzer()
-    page = _FakePage("Please wait — your download will begin shortly.")
+    page = _FakePage("Please wait - your download will begin shortly.")
     assert analyzer._page_shows_download_intent(page) is True
 
 
@@ -41,5 +41,5 @@ def test_download_intent_handles_empty_body():
 
 def test_download_intent_swallows_evaluate_errors():
     analyzer = DownloadAnalyzer()
-    # A page whose evaluate raises must not crash the analyzer — treat as no cue.
+    # A page whose evaluate raises must not crash the analyzer - treat as no cue.
     assert analyzer._page_shows_download_intent(_FakePage(raises=True)) is False

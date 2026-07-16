@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}SOC Box &mdash; Bulk Scan{% endblock %}
+{% block title %}SOC Box - Bulk Scan{% endblock %}
 
 {% block container_class %}container-wide{% endblock %}
 
@@ -21,7 +21,7 @@
             <input type="number" id="feed-limit" class="feed-input feed-limit" value="15"
                 min="1" max="100" aria-label="Number of URLs" title="How many URLs to import">
             <input type="text" id="feed-tag" class="feed-input feed-tag"
-                placeholder="tag — URLhaus only (e.g. ClearFake)" aria-label="URLhaus tag filter">
+                placeholder="tag - URLhaus only (e.g. ClearFake)" aria-label="URLhaus tag filter">
             <button type="button" class="btn btn-secondary" id="feed-import-btn" onclick="importFromFeed()">
                 Import from feed
             </button>
@@ -279,8 +279,8 @@
     }
 
     function handleScanFailure(i) {
-        /* Retry a transient failure once — reusing the held concurrency slot,
-           after a short backoff — before giving up and marking the row ERROR.
+        /* Retry a transient failure once - reusing the held concurrency slot,
+           after a short backoff - before giving up and marking the row ERROR.
            Common cause: a transient container DNS hiccup on one scan. */
         if ((rowRetries[i] || 0) < MAX_RETRIES) {
             rowRetries[i] = (rowRetries[i] || 0) + 1;
@@ -325,7 +325,7 @@
             });
 
             es.addEventListener("action_required", function () {
-                /* Bulk hit a CAPTCHA gate (it doesn't block on a human) — offer
+                /* Bulk hit a CAPTCHA gate (it doesn't block on a human) - offer
                    a per-row Solve button to re-run this URL interactively. */
                 markRowGated(i);
             });

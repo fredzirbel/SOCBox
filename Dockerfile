@@ -1,5 +1,5 @@
 # =============================================================================
-# SOC Box — The SOC Analyst's Toolbox (containerised)
+# SOC Box - The SOC Analyst's Toolbox (containerised)
 # =============================================================================
 # Build:  docker compose up --build
 # Access: http://localhost:8000

@@ -62,7 +62,7 @@ _AUTH_HREF_PATTERNS: list[re.Pattern[str]] = [
     ]
 ]
 
-# Legitimate auth domains that should NOT be flagged — real sign-in pages.
+# Legitimate auth domains that should NOT be flagged - real sign-in pages.
 _SAFE_AUTH_DOMAINS = frozenset({
     "accounts.google.com",
     "login.microsoftonline.com",
@@ -334,7 +334,7 @@ class LinkDiscoveryAnalyzer(BaseAnalyzer):
         if href.startswith(("http://", "https://")):
             destination_url = href
         elif href.startswith("/") and href != "/":
-            # Relative path — resolve against source
+            # Relative path - resolve against source
             parsed = urlparse(source_url)
             destination_url = f"{parsed.scheme}://{parsed.netloc}{href}"
 
@@ -442,7 +442,7 @@ class LinkDiscoveryAnalyzer(BaseAnalyzer):
         if dest_domain == source_domain:
             return None, None
 
-        # Known-safe auth provider — report as info, not a threat
+        # Known-safe auth provider - report as info, not a threat
         if dest_hostname in _SAFE_AUTH_DOMAINS:
             finding = Finding(
                 description=(

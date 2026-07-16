@@ -5,10 +5,10 @@ api_keys:
   virustotal: ""
   google_safebrowsing: ""
   abuseipdb: ""
-  # abuse.ch Auth-Key (free, from https://auth.abuse.ch) — used by `socbox-feeds`
+  # abuse.ch Auth-Key (free, from https://auth.abuse.ch) - used by `socbox-feeds`
   # to pull recent URLhaus URLs via the official API instead of scraping.
   urlhaus: ""
-  # IPinfo token (free tier, from https://ipinfo.io) — used by the IP enricher
+  # IPinfo token (free tier, from https://ipinfo.io) - used by the IP enricher
   # for ASN/org/geo. Enrichment still runs (with less detail) without it.
   ipinfo: ""
 
@@ -42,7 +42,7 @@ interactive:
   # X display the headed takeover browser renders on (matches the entrypoint).
   display: ":99"
 
-# Bulk Scan concurrency — how many URLs scan in parallel.
+# Bulk Scan concurrency - how many URLs scan in parallel.
 # Each parallel scan runs its own headed Chrome, so this is bound by RAM/CPU,
 # NOT by a code limit: pushing it too high causes OOM/timeouts and SLOWER scans,
 # and more simultaneous CAPTCHA gates contend for the single solver display.

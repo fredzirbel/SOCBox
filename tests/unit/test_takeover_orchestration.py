@@ -1,14 +1,14 @@
 """Orchestration tests for the web noVNC CAPTCHA takeover.
 
-These cover the handoff logic that ties the headless scan to the headed solve —
+These cover the handoff logic that ties the headless scan to the headed solve -
 the parts unit-testable without an X display or a real browser:
 
-  * ``remote_takeover_solve`` — captures the scan's session, runs the headed
+  * ``remote_takeover_solve`` - captures the scan's session, runs the headed
     job, and on success stashes the clearance for the scan to replay.
-  * ``navigate_with_bypass`` (human-present branch) — on a detected gate, hands
+  * ``navigate_with_bypass`` (human-present branch) - on a detected gate, hands
     off to the takeover and replays the clearance past the gate, but only when
     the takeover actually succeeds.
-  * ``_replay_clearance_and_reload`` — injects the solved cookies and reloads.
+  * ``_replay_clearance_and_reload`` - injects the solved cookies and reloads.
 
 The headed solve itself (``_takeover_job``) and the Xvfb/x11vnc/websockify noVNC
 plumbing are container-bound and verified live, not here.
@@ -122,7 +122,7 @@ def test_replay_clearance_is_noop_without_state() -> None:
 
 
 # ---------------------------------------------------------------------------
-# navigate_with_bypass — human-present (web takeover) branch
+# navigate_with_bypass - human-present (web takeover) branch
 # ---------------------------------------------------------------------------
 
 def _patch_nav(monkeypatch, provider: str, solved: bool):

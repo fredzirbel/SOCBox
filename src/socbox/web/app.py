@@ -101,7 +101,7 @@ app = FastAPI(title="SOC Box", version="0.1.0", lifespan=_lifespan)
 templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
 
 # ---------------------------------------------------------------------------
-# Rate limiting (slowapi) — keyed on service token (agent) or client IP
+# Rate limiting (slowapi) - keyed on service token (agent) or client IP
 # ---------------------------------------------------------------------------
 
 
@@ -188,7 +188,7 @@ def _json_script_safe(obj: Any) -> str:
     """Serialize *obj* to JSON safe to embed inside an HTML ``<script>`` block.
 
     ``json.dumps`` leaves ``<``, ``>``, ``&`` and the U+2028/U+2029 line
-    separators intact — any of which can break out of a ``<script>`` context
+    separators intact - any of which can break out of a ``<script>`` context
     (e.g. a scanned page delivering a file whose name contains ``</script>``,
     or classification evidence lifted from attacker-controlled page text).
     Escaping them as ``\\uXXXX`` keeps the JSON valid while preventing the
@@ -514,7 +514,7 @@ def _resolve_ip(url: str) -> str:
 def _enforce_ssrf(url: str) -> None:
     """Reject a scan whose target resolves to non-public infrastructure.
 
-    Raises HTTPException(400) so the scan never starts — covering both the
+    Raises HTTPException(400) so the scan never starts - covering both the
     requests-based analyzers and the browser.
     """
     cfg = _config.get("ssrf", {})
@@ -538,7 +538,7 @@ _active_streams: dict[str, asyncio.Queue] = {}
 # ---------------------------------------------------------------------------
 # A short-lived token is minted when a human-present scan hits a CAPTCHA gate and
 # embedded in the view_url, so the live-browser viewer is only reachable while a
-# takeover is active. SECURITY: this is a v1 guard only — the noVNC endpoint MUST
+# takeover is active. SECURITY: this is a v1 guard only - the noVNC endpoint MUST
 # sit behind API auth / SSO (item #6) or a VPN before any network exposure.
 _takeover_tokens: dict[str, float] = {}  # token -> expiry (epoch seconds)
 _takeover_tokens_lock = threading.Lock()
@@ -861,7 +861,7 @@ async def results(request: Request, scan_id: str) -> HTMLResponse:
     bulk_id = request.query_params.get("bulk", "")
 
     if streaming:
-        # Render skeleton — scan is likely still in progress
+        # Render skeleton - scan is likely still in progress
         return templates.TemplateResponse(
             request,
             "results.html",
@@ -1136,7 +1136,7 @@ async def api_scan_sync(request: Request) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
-# v1 TAP API — agent/SOAR-callable URL actions (SlashNext replacement)
+# v1 TAP API - agent/SOAR-callable URL actions (SlashNext replacement)
 # ---------------------------------------------------------------------------
 
 # SOC Box machine verdict -> suggested alert disposition (analyst confirms TP/BTP/FP).
@@ -1240,7 +1240,7 @@ async def v1_url_scan(request: Request) -> JSONResponse:
 
 @app.post("/api/v1/url/text")
 async def v1_url_text(request: Request) -> JSONResponse:
-    """Get URL Text TAP — visible text of the final landing page."""
+    """Get URL Text TAP - visible text of the final landing page."""
     scan_id, entry = await _v1_resolve(request)
     if not entry:
         return JSONResponse({"error": "URL or scan_id required"}, status_code=400)
@@ -1250,7 +1250,7 @@ async def v1_url_text(request: Request) -> JSONResponse:
 
 @app.post("/api/v1/url/screenshot")
 async def v1_url_screenshot(request: Request) -> JSONResponse:
-    """Get URL Screenshot TAP — final landing page screenshot (URL annotated)."""
+    """Get URL Screenshot TAP - final landing page screenshot (URL annotated)."""
     scan_id, entry = await _v1_resolve(request)
     if not entry:
         return JSONResponse({"error": "URL or scan_id required"}, status_code=400)
@@ -1262,7 +1262,7 @@ async def v1_url_screenshot(request: Request) -> JSONResponse:
 
 @app.post("/api/v1/url/threat-intel")
 async def v1_url_threat_intel(request: Request) -> JSONResponse:
-    """Get URL Threat Intel TAP — verdict + suggested disposition + final URL."""
+    """Get URL Threat Intel TAP - verdict + suggested disposition + final URL."""
     scan_id, entry = await _v1_resolve(request)
     if not entry:
         return JSONResponse({"error": "URL or scan_id required"}, status_code=400)
@@ -1302,7 +1302,7 @@ async def v1_set_disposition(scan_id: str, request: Request) -> JSONResponse:
     if not persisted:
         if entry is None:
             return JSONResponse({"error": "scan_id not found"}, status_code=404)
-        # Row not in store yet — persist the scan, then set the disposition.
+        # Row not in store yet - persist the scan, then set the disposition.
         store.save_entries(_serialize_scans())
         store.set_disposition(scan_id, disp, analyst, note, at)
 
@@ -1379,7 +1379,7 @@ async def v1_scan_async(request: Request) -> JSONResponse:
         url = f"https://{url}"
     _enforce_ssrf(url)
 
-    # A caller-supplied callback_url is an SSRF vector — SOC Box will POST to it
+    # A caller-supplied callback_url is an SSRF vector - SOC Box will POST to it
     # server-side. Validate it against the same guard as scan targets so it
     # can't be pointed at internal services / cloud metadata. The config
     # webhook_url is admin-set and trusted (may legitimately be internal).
@@ -1749,9 +1749,8 @@ async def kql_page(request: Request) -> HTMLResponse:
 async def api_kql_generate(request: Request) -> JSONResponse:
     """Generate Defender/Sentinel KQL from pasted indicators (no scan required).
 
-    Accepts ``{"text": "<indicators>", "goal": "<optional hunt goal>"}``. Returns
-    the classified indicators, ready-to-paste queries, and a copy-ready Claude
-    prompt for freeform hunts.
+    Accepts ``{"text": "<indicators>"}``. Returns the classified indicators and
+    ready-to-paste queries.
     """
     from socbox.web.kql import generate_from_text
 
@@ -1760,10 +1759,9 @@ async def api_kql_generate(request: Request) -> JSONResponse:
     except Exception:
         body = {}
     text = str(body.get("text") or "").strip()
-    goal = str(body.get("goal") or "")
     if not text:
         return JSONResponse({"error": "No indicators provided"}, status_code=400)
-    return JSONResponse(generate_from_text(text, goal))
+    return JSONResponse(generate_from_text(text))
 
 
 # ---------------------------------------------------------------------------

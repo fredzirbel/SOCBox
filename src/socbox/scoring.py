@@ -2,8 +2,8 @@
 
 Classifies URLs into a 3-tier system (Safe / Uncertain / Malicious) with a
 confidence percentage that reflects how strongly the evidence agrees on the
-classification.  Threat feed matches are treated as weighted signals — not
-binary overrides — so a single low-confidence hit is distinguished from
+classification.  Threat feed matches are treated as weighted signals - not
+binary overrides - so a single low-confidence hit is distinguished from
 unanimous feed agreement.
 """
 
@@ -217,7 +217,7 @@ def _compute_feed_signal(
     The signal accounts for:
       - Which feeds matched (weighted by reliability).
       - How many VT engines flagged the URL (severity scaling).
-      - Non-matching feeds only dilute the signal partially — absence
+      - Non-matching feeds only dilute the signal partially - absence
         of data in GSB/AbuseIPDB should not cancel a strong VT hit.
 
     Args:

@@ -1,5 +1,5 @@
 # =============================================================================
-# SOC Box — Docker Compose
+# SOC Box - Docker Compose
 # =============================================================================
 #
 # Quick start:
@@ -23,7 +23,7 @@ services:
       # host 8080 -> container 8000 (8080 sidesteps Windows reserved ports)
       - "8080:8000"
       # noVNC live-browser viewer for transparent CAPTCHA solving.
-      # SECURITY: this is a controllable browser on malicious pages — keep it
+      # SECURITY: this is a controllable browser on malicious pages - keep it
       # behind API auth / SSO (#6) or a VPN before any network exposure.
       - "6080:6080"
 

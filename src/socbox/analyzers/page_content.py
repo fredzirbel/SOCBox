@@ -103,7 +103,7 @@ class PageContentAnalyzer(BaseAnalyzer):
             logger.info("Using browser fallback for page content: %s", url)
             html_text = self._fetch_with_browser(url, browser=browser)
             if not html_text:
-                # Browser also failed — return what we have
+                # Browser also failed - return what we have
                 if extra_findings:
                     score = min(100.0, sum(f.score_contribution for f in extra_findings))
                     return AnalyzerResult(
@@ -228,7 +228,7 @@ class PageContentAnalyzer(BaseAnalyzer):
             if "phish" in body or "malware" in body or "deceptive" in body:
                 return Finding(
                     description=(
-                        "Cloudflare security block detected — page flagged "
+                        "Cloudflare security block detected - page flagged "
                         f"as dangerous (HTTP {status_code})"
                     ),
                     score_contribution=25.0,

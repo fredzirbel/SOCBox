@@ -271,7 +271,7 @@ class SSLTLSAnalyzer(BaseAnalyzer):
         """
         try:
             ipaddress.ip_address(hostname)
-            return None  # IP host — SAN dNSName matching is not meaningful
+            return None  # IP host - SAN dNSName matching is not meaningful
         except ValueError:
             pass
 

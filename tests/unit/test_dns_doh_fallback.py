@@ -3,7 +3,7 @@
 The requests-based analyzers (HTTP, download, threat feeds) reach the target
 host through ``request_with_doh_fallback``.  When the system resolver fails
 for the target host, the helper must resolve it via public DoH and retry the
-request with a thread-local getaddrinfo override — leaving SNI, TLS, and the
+request with a thread-local getaddrinfo override - leaving SNI, TLS, and the
 URL untouched.  These tests pin that behaviour without any real network I/O.
 """
 

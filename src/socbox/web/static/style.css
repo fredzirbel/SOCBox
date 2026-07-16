@@ -1,5 +1,5 @@
 /* ============================================================
-   SOC Box — Dark Theme Stylesheet
+   SOC Box - Dark Theme Stylesheet
    ============================================================ */
 
 :root {
@@ -1530,7 +1530,7 @@ a.vt-threat-label:hover {
 }
 
 /* ============================================================
-   Critical Start rebrand — motion & polish
+   Critical Start rebrand - motion & polish
    ============================================================ */
 
 @keyframes fadeUp {
@@ -1595,7 +1595,7 @@ main.container { animation: fadeUp .5s var(--transition-slow) both; }
 }
 
 /* ============================================================
-   Light-theme status colors — convert the saturated dark
+   Light-theme status colors - convert the saturated dark
    status backgrounds (badges, score banner, recommendation,
    flags) into light tints with accessible dark text.
    ============================================================ */

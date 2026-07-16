@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}KQL Generator — SOC Box{% endblock %}
+{% block title %}KQL Generator - SOC Box{% endblock %}
 
 {% block content %}
 <style>
@@ -27,18 +27,14 @@
   .kql-copy { margin-left: auto; }
   .kql-desc { color: var(--text-muted); font-size: .85rem; margin: 0 0 .5rem; }
   .kql-code { background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius); padding: .7rem .8rem; margin: 0; overflow-x: auto; font-size: .82rem; white-space: pre; }
-  .claude-box { background: var(--bg-card); border: 1px dashed var(--border); border-radius: var(--radius-lg); padding: 1rem; margin-top: 1.4rem; }
-  .claude-box h3 { margin: 0 0 .3rem; font-family: var(--font-display); }
-  .claude-box p { color: var(--text-muted); font-size: .85rem; margin: 0 0 .6rem; }
   .muted { color: var(--text-muted); }
 </style>
 
 <section class="tool-header">
   <h1>KQL Generator</h1>
   <p class="tool-sub">
-    Paste indicators (IPs, domains, URLs, file hashes, sender/UPN emails — mixed and defanged is fine).
+    Paste indicators (IPs, domains, URLs, file hashes, sender/UPN emails - mixed and defanged is fine).
     SOC Box classifies them and builds ready-to-paste Defender XDR / Sentinel Advanced Hunting queries.
-    For a bespoke hunt, use the Claude prompt at the bottom in your own Claude seat.
   </p>
 </section>
 
@@ -46,8 +42,6 @@
   <label for="kql-input">Indicators</label>
   <textarea id="kql-input" rows="4" spellcheck="false"
             placeholder="45[.]134[.]26[.]7, evil-login[.]com, https://bad.example/x, sender@phish.tld,&#10;e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"></textarea>
-  <label for="kql-goal">Hunt goal (optional — used for the Claude prompt)</label>
-  <input type="text" id="kql-goal" placeholder="e.g. find lateral movement from any host that contacted these IPs">
   <div class="tool-actions">
     <button type="submit" class="btn-primary" id="kql-go">Generate</button>
     <span id="kql-status" class="tool-status"></span>
@@ -56,7 +50,6 @@
 
 <div id="kql-indicators" class="ind-summary"></div>
 <div id="kql-results"></div>
-<div id="kql-claude"></div>
 
 <script>
 (function () {
@@ -83,14 +76,11 @@
       '<pre class="kql-code">' + esc(q.query) + "</pre></div>";
   }
 
-  var claudePrompt = "";
   var form = document.getElementById("kql-form");
   var input = document.getElementById("kql-input");
-  var goal = document.getElementById("kql-goal");
   var status = document.getElementById("kql-status");
   var indBox = document.getElementById("kql-indicators");
   var out = document.getElementById("kql-results");
-  var claudeBox = document.getElementById("kql-claude");
   var btn = document.getElementById("kql-go");
 
   form.addEventListener("submit", function (e) {
@@ -98,10 +88,10 @@
     var text = input.value.trim();
     if (!text) return;
     btn.disabled = true; status.textContent = "Generating…";
-    indBox.innerHTML = ""; out.innerHTML = ""; claudeBox.innerHTML = "";
+    indBox.innerHTML = ""; out.innerHTML = "";
     fetch("/api/tools/kql", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: text, goal: goal.value }),
+      body: JSON.stringify({ text: text }),
     }).then(function (r) { return r.json(); }).then(function (d) {
       btn.disabled = false;
       if (d.error) { status.textContent = "Error: " + d.error; return; }
@@ -111,11 +101,6 @@
       out.innerHTML = queries.length
         ? queries.map(queryCard).join("")
         : '<p class="muted">No recognizable indicators found.</p>';
-      claudePrompt = d.claude_prompt || "";
-      claudeBox.innerHTML =
-        '<div class="claude-box"><h3>Freeform hunt via Claude</h3>' +
-        '<p>Copy this into your own Claude seat for a bespoke query — nothing is sent from SOC Box.</p>' +
-        '<button type="button" class="btn-mini" id="copy-claude">Copy Claude prompt</button></div>';
     }).catch(function () { btn.disabled = false; status.textContent = "Request failed"; });
   });
 
@@ -124,12 +109,6 @@
     if (c) {
       navigator.clipboard.writeText(c.getAttribute("data-q") || "").then(function () {
         c.textContent = "Copied!"; setTimeout(function () { c.textContent = "Copy"; }, 1500);
-      }).catch(function () {});
-      return;
-    }
-    if (e.target.id === "copy-claude") {
-      navigator.clipboard.writeText(claudePrompt).then(function () {
-        e.target.textContent = "Copied!"; setTimeout(function () { e.target.textContent = "Copy Claude prompt"; }, 1500);
       }).catch(function () {});
     }
   });

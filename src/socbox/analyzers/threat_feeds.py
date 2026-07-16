@@ -44,7 +44,7 @@ class ThreatFeedAnalyzer(BaseAnalyzer):
         Args:
             url: The URL to check.
             config: The loaded configuration dictionary.
-            browser: Unused — accepted for interface compliance.
+            browser: Unused - accepted for interface compliance.
 
         Returns:
             AnalyzerResult summarizing threat feed findings.

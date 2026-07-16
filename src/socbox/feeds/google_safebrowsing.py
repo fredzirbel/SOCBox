@@ -177,7 +177,7 @@ class GoogleSafeBrowsingFeed(BaseFeed):
                 details=f"Threat types: {', '.join(threat_types)}",
                 raw_response=resp.json(),
             )
-        return None  # inconclusive — try hash API next
+        return None  # inconclusive - try hash API next
 
     def _hash_api(self, url: str) -> FeedResult | None:
         """Query the v4 hash-based API (fullHashes:find).

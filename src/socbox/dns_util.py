@@ -30,7 +30,7 @@ def is_public_ip(ip: str) -> bool:
 
     Used to keep the DoH fallback from ever handing back a private, loopback,
     link-local (incl. cloud metadata 169.254.169.254), multicast, reserved, or
-    unspecified address — an SSRF bypass, since a public domain could carry an
+    unspecified address - an SSRF bypass, since a public domain could carry an
     internal A record that the system resolver refuses but public DoH returns.
     """
     try:
@@ -88,7 +88,7 @@ def _resolve_via_doh(hostname: str) -> str:
                     # SSRF guard: never return an internal address from DoH.
                     if not is_public_ip(ip):
                         logger.warning(
-                            "DoH (%s) returned non-public IP %s for %s — refusing",
+                            "DoH (%s) returned non-public IP %s for %s - refusing",
                             server, ip, hostname,
                         )
                         return ""
@@ -147,7 +147,7 @@ def resolve_hostname(url: str) -> str:
 # The browser reaches DoH-resolved hosts via Chromium's --host-resolver-rules
 # (see build_chromium_args).  The requests-based analyzers (HTTP, download,
 # threat feeds) have no such knob, so when the system resolver fails for the
-# target host they error out — even though the host is reachable via DoH.
+# target host they error out - even though the host is reachable via DoH.
 #
 # request_with_doh_fallback() closes that gap: it issues a normal request, and
 # on a DNS-class ConnectionError it resolves the host via DoH and retries with
@@ -310,7 +310,7 @@ def compute_host_resolver_rule(url: str) -> str:
 
     try:
         socket.gethostbyname(hostname)
-        return ""  # System DNS works — no override required.
+        return ""  # System DNS works - no override required.
     except (socket.gaierror, OSError):
         ip = resolve_hostname(url)
         if ip:

@@ -62,7 +62,7 @@ def generate_osint_links(
         },
     ]
 
-    # IP-specific links — only included when an IP is available
+    # IP-specific links - only included when an IP is available
     if ip:
         links.insert(
             2,
@@ -74,7 +74,7 @@ def generate_osint_links(
             },
         )
 
-    # Redirect chain OSINT — add VirusTotal links for each redirect hop
+    # Redirect chain OSINT - add VirusTotal links for each redirect hop
     # that differs from the primary scanned URL.
     if redirect_chain:
         seen_urls: set[str] = {url.rstrip("/")}

@@ -89,7 +89,7 @@ class HTTPResponseAnalyzer(BaseAnalyzer):
             session = requests.Session()
             session.max_redirects = max_redirects
             # stream=True so the (potentially hostile, unbounded) response body
-            # is never downloaded — this analyzer only inspects headers, the
+            # is never downloaded - this analyzer only inspects headers, the
             # redirect history, and the final URL.
             response = request_with_doh_fallback(
                 "GET",

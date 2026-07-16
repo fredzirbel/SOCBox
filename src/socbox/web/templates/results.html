@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}SOC Box &mdash; Results{% endblock %}
+{% block title %}SOC Box - Results{% endblock %}
 
-{# Streaming mode embeds the live CAPTCHA-solver browser — give it the wide
+{# Streaming mode embeds the live CAPTCHA-solver browser - give it the wide
    container so the viewer is large and easy to read. #}
 {% block container_class %}{% if streaming %}container-wide{% endif %}{% endblock %}
 
@@ -10,7 +10,7 @@
 
 {% if streaming %}
 {# ================================================================
-   STREAMING MODE — skeleton page + SSE progressive rendering
+   STREAMING MODE - skeleton page + SSE progressive rendering
    ================================================================ #}
 
 <!-- Score Banner (loading state) -->
@@ -31,10 +31,9 @@
         <strong id="captcha-solver-title">Solve the challenge to continue</strong>
     </div>
     <p id="captcha-solver-help" style="margin:0 0 0.6rem;font-size:0.9rem;opacity:0.85;">
-        A CAPTCHA is blocking this scan. Solve it in the live browser below &mdash;
-        the scan resumes automatically once it's solved.
+        A CAPTCHA is blocking this scan. Solve it in the live browser below - the scan resumes automatically once it's solved.
     </p>
-    <iframe id="captcha-solver-iframe" title="Live browser &mdash; solve the CAPTCHA"
+    <iframe id="captcha-solver-iframe" title="Live browser - solve the CAPTCHA"
             allow="clipboard-read; clipboard-write"
             style="display:block;width:100%;aspect-ratio:16/9;max-height:84vh;border:1px solid var(--border,#333);border-radius:6px;background:#000;"></iframe>
 </section>
@@ -147,7 +146,7 @@
                     <tr>
                         <th>Analyzer</th>
                         <th title="Whether the analyzer ran, was skipped, or errored">Status</th>
-                        <th title="Points this analyzer added to the 0–100 composite (raw score × normalized weight × blend). Hover a cell for the raw numbers.">Contribution</th>
+                        <th title="Points this analyzer added to the 0-100 composite (raw score × normalized weight × blend). Hover a cell for the raw numbers.">Contribution</th>
                     </tr>
                 </thead>
                 <tbody id="analyzer-tbody">
@@ -205,13 +204,13 @@
     es.addEventListener("action_required", function (e) {
         try {
             var d = JSON.parse(e.data);
-            var msg = "SOC Box needs you — solve the " + (d.provider || "CAPTCHA") +
+            var msg = "SOC Box needs you - solve the " + (d.provider || "CAPTCHA") +
                 " for " + defang(d.url || "");
             if (window.Notification && Notification.permission === "granted") {
                 new Notification("SOC Box: action required", { body: msg });
             }
             var lbl = document.getElementById("score-label");
-            if (lbl) lbl.textContent = "Action required — solve the CAPTCHA below";
+            if (lbl) lbl.textContent = "Action required - solve the CAPTCHA below";
             /* view_url is present only for human-present scans with the live
                solver enabled; otherwise we just notified the analyst. */
             if (d.view_url) openCaptchaSolver(d.provider, d.view_url);
@@ -385,7 +384,7 @@
         var contrib = analyzerContribution(r.analyzer_name);
         var cell;
         if (contrib == null) {
-            cell = '<span class="muted">' + (_breakdown ? "—" : "…") + '</span>';
+            cell = '<span class="muted">' + (_breakdown ? "-" : "…") + '</span>';
         } else {
             var pct = maxContrib > 0 ? Math.max(3, Math.round(contrib / maxContrib * 100)) : 0;
             cell = '<div class="contrib"><div class="contrib-bar"><span style="width:' + pct + '%"></span></div>' +
@@ -420,7 +419,7 @@
         var el = document.getElementById("score-summary");
         if (!el || !_breakdown) return;
         var b = _breakdown;
-        var txt = "Composite " + (b.composite != null ? b.composite.toFixed(1) : "—") +
+        var txt = "Composite " + (b.composite != null ? b.composite.toFixed(1) : "-") +
             " = analyzers (" + Math.round((b.analyzer_blend || 0) * 100) + "%) " + (b.analyzer_total || 0).toFixed(1);
         if (b.threat_feeds) txt += " + threat feeds (" + Math.round((b.feed_blend || 0) * 100) + "%) " + (b.feed_total || 0).toFixed(1);
         txt += ". VT severity floor: " + (b.floor_applied != null ? "applied (" + b.floor_applied + ")" : "not applied") + ".";
@@ -887,7 +886,7 @@
 
 {% else %}
 {# ================================================================
-   STATIC MODE — full results (existing template, unchanged)
+   STATIC MODE - full results (existing template, unchanged)
    ================================================================ #}
 {% set r = report %}
 {% set cat = r.risk_category.name | lower %}
@@ -1059,7 +1058,7 @@
                             <span class="badge badge-status-skipped">Not Found</span>
                             {% endif %}
                         </td>
-                        <td>{{ f.details or "—" }}</td>
+                        <td>{{ f.details or "-" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -1089,7 +1088,7 @@
                     {% if r.file_download.filename %}
                         <span class="file-dl-filename-label">File name:</span> {{ r.file_download.filename }}<button class="copy-chip" data-copy="{{ r.file_download.filename }}" title="Copy">&#128203;</button>
                     {% elif r.file_download.cloudflare_blocked %}
-                        <span class="muted" style="font-weight:400;">Unknown filename &mdash; hidden behind Cloudflare interstitial</span>
+                        <span class="muted" style="font-weight:400;">Unknown filename - hidden behind Cloudflare interstitial</span>
                     {% else %}
                         <span class="muted" style="font-weight:400;">Unknown filename</span>
                     {% endif %}
@@ -1136,7 +1135,7 @@
                             {% else %}
                             <span class="muted" id="hash-empty-msg">
                                 {% if r.file_download.cloudflare_blocked %}
-                                Could not retrieve file &mdash; use manual lookup below
+                                Could not retrieve file - use manual lookup below
                                 {% else %}
                                 Could not compute hash
                                 {% endif %}
@@ -1378,7 +1377,7 @@
                     <tr>
                         <th>Analyzer</th>
                         <th title="Whether the analyzer ran, was skipped, or errored">Status</th>
-                        <th title="Points this analyzer added to the 0–100 composite (raw score × normalized weight × blend). Hover a cell for the raw numbers.">Contribution</th>
+                        <th title="Points this analyzer added to the 0-100 composite (raw score × normalized weight × blend). Hover a cell for the raw numbers.">Contribution</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1414,7 +1413,7 @@
                             </div>
                             {% if a.is_feed %}<div class="contrib-note">blended at {{ (breakdown.feed_blend * 100) | round | int }}%</div>{% endif %}
                             {% else %}
-                            <span class="muted">—</span>
+                            <span class="muted">-</span>
                             {% endif %}
                         </td>
                     </tr>

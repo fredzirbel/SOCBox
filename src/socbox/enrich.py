@@ -1,8 +1,8 @@
 """Multi-source IP enrichment for SOC Box.
 
 Given one or more IP addresses, gathers live reputation/geo/ASN data from the
-OSINT sources SOC analysts already pivot through — VirusTotal, AbuseIPDB,
-IPinfo, and (optionally) a local MaxMind GeoLite2 database — and builds the
+OSINT sources SOC analysts already pivot through - VirusTotal, AbuseIPDB,
+IPinfo, and (optionally) a local MaxMind GeoLite2 database - and builds the
 copyable OSINT links to the same tools. Each source is queried concurrently and
 degrades gracefully: a missing API key or a failed lookup yields a
 ``configured: false`` / ``error`` marker rather than breaking the whole result.
@@ -134,7 +134,7 @@ def _ipinfo_ip(ip: str, config: dict[str, Any], timeout: int) -> dict[str, Any]:
 
 
 def _maxmind_geo(ip: str, config: dict[str, Any]) -> dict[str, Any]:
-    """Local MaxMind GeoLite2 City lookup — only when a DB path is configured.
+    """Local MaxMind GeoLite2 City lookup - only when a DB path is configured.
 
     Optional and dependency-light: skipped unless ``geoip2`` is installed and
     ``enrich.maxmind_db`` points at a GeoLite2-City.mmdb, so SOC Box never requires
@@ -160,7 +160,7 @@ def _maxmind_geo(ip: str, config: dict[str, Any]) -> dict[str, Any]:
                 "latitude": r.location.latitude,
                 "longitude": r.location.longitude,
             }
-    except Exception as exc:  # noqa: BLE001 — geo lookup must never break enrichment
+    except Exception as exc:  # noqa: BLE001 - geo lookup must never break enrichment
         return {"configured": True, "error": str(exc)}
 
 
@@ -197,7 +197,7 @@ def enrich_ip(ip: str, config: dict[str, Any]) -> dict[str, Any]:
     if not is_public_ip(ip):
         return {
             "ip": ip, "valid": True, "public": False,
-            "note": "Non-public address — no external reputation to look up.",
+            "note": "Non-public address - no external reputation to look up.",
             "osint_links": [],
         }
 

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}SOC Box &mdash; Scan a URL{% endblock %}
+{% block title %}SOC Box - Scan a URL{% endblock %}
 
 {% block content %}
 <style>
@@ -14,15 +14,10 @@
     transition: border-color var(--transition), transform var(--transition);
   }
   a.tool-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-  .tool-card.disabled { opacity: .55; cursor: default; }
   .tool-card .tc-top { display: flex; align-items: center; gap: .6rem; margin-bottom: .4rem; }
   .tool-card .tc-icon { font-size: 1.35rem; line-height: 1; }
   .tool-card .tc-name { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; }
   .tool-card .tc-desc { color: var(--text-muted); font-size: .85rem; margin: 0; }
-  .tool-card .tc-soon {
-    margin-left: auto; font-size: .65rem; text-transform: uppercase; letter-spacing: .05em;
-    color: var(--text-muted); border: 1px solid var(--border); border-radius: 999px; padding: .1rem .5rem;
-  }
 </style>
 <section class="hero">
     <h1>Scan a URL</h1>
@@ -62,16 +57,6 @@
       <div class="tc-top"><span class="tc-icon">🔎</span><span class="tc-name">KQL Generator</span></div>
       <p class="tc-desc">Build Defender / Sentinel Advanced Hunting queries from any indicator.</p>
     </a>
-    <span class="tool-card disabled">
-      <div class="tc-top"><span class="tc-icon">🧬</span><span class="tc-name">Command Deobfuscator</span>
-        <span class="tc-soon">Soon</span></div>
-      <p class="tc-desc">Decode PowerShell / base64 / hex one-liners and get a verdict.</p>
-    </span>
-    <span class="tool-card disabled">
-      <div class="tc-top"><span class="tc-icon">📧</span><span class="tc-name">Email Header Analyzer</span>
-        <span class="tc-soon">Soon</span></div>
-      <p class="tc-desc">Parse SPF / DKIM / DMARC, hops &amp; spoofing; pivot URLs into a scan.</p>
-    </span>
   </div>
 </section>
 

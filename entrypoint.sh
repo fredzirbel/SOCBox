@@ -41,7 +41,7 @@ if [ -n "${VNC_PASSWORD:-}" ]; then
     x11vnc -storepasswd "${VNC_PASSWORD}" /run/socbox/vncpass >/dev/null 2>&1
     vnc_args+=(-rfbauth /run/socbox/vncpass)
 else
-    echo "[entrypoint] WARNING: VNC_PASSWORD unset — starting x11vnc with no password" >&2
+    echo "[entrypoint] WARNING: VNC_PASSWORD unset - starting x11vnc with no password" >&2
     vnc_args+=(-nopw)
 fi
 x11vnc "${vnc_args[@]}"

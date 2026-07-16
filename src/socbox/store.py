@@ -2,7 +2,7 @@
 
 Durable backing store for the scan cache so scans **and** analyst dispositions
 (TP / Benign TP / FP) survive restarts and form a queryable verdict history for
-accuracy reporting — something the previous flat JSON cache couldn't provide.
+accuracy reporting - something the previous flat JSON cache couldn't provide.
 
 Each scan is stored as its serialized entry (same shape the JSON cache used) in
 ``entry_json``, plus indexed columns (verdict, score, disposition, …). The

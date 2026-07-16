@@ -4,7 +4,7 @@ Uses a layered detection strategy:
   1. HEAD request Content-Type / Content-Disposition headers.
   2. URL path extension heuristic (e.g. ``/file.zip``).
   3. Streamed GET probe when HEAD is ambiguous but the path looks like a file.
-  4. **Playwright browser fallback** — when ``requests`` is blocked (403 /
+  4. **Playwright browser fallback** - when ``requests`` is blocked (403 /
      Cloudflare challenge / bot detection) but a real browser can trigger the
      download, this layer intercepts the file via Playwright's download event,
      computes the SHA-256, and proceeds with OSINT lookups.
@@ -65,7 +65,7 @@ _MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024
 
 # Seconds to wait for a browser-triggered download before giving up.
 # Many phishing kits show fake "loading" screens for 5-15 seconds before
-# delivering the payload, so this needs to be generous — but only when the
+# delivering the payload, so this needs to be generous - but only when the
 # page actually shows download-intent cues. A genuine JS auto-download fires
 # within a second or two of load, so a static landing page (the common case:
 # credential phishing, fake login, ClickFix) that will never download is
@@ -199,7 +199,7 @@ class DownloadAnalyzer(BaseAnalyzer):
         )
 
         # -----------------------------------------------------------------
-        # Layer 4 — Playwright browser fallback for detection + hashing.
+        # Layer 4 - Playwright browser fallback for detection + hashing.
         # When requests is blocked and headers gave us nothing, use the
         # shared browser to navigate the URL and intercept any download that
         # the real browser triggers.  Also detects Cloudflare phishing
@@ -248,7 +248,7 @@ class DownloadAnalyzer(BaseAnalyzer):
         # Resolve filename.  When a browser download captured the file we
         # trust its suggested_filename.  For the Cloudflare-blocked case the
         # "suggested_filename" is just the opaque URL path segment (e.g.
-        # "F4lBD64y"), which is NOT the real filename — leave it blank so the
+        # "F4lBD64y"), which is NOT the real filename - leave it blank so the
         # template shows "Unknown (behind Cloudflare)" instead.
         has_suggested = (
             browser_dl_info
@@ -588,7 +588,7 @@ class DownloadAnalyzer(BaseAnalyzer):
             if not is_cf_phishing:
                 return None
 
-            logger.info("Cloudflare phishing interstitial detected — extracting metadata")
+            logger.info("Cloudflare phishing interstitial detected - extracting metadata")
 
             # Pull the original_path from the hidden form field.
             original_path = page.evaluate("""() => {
@@ -895,7 +895,7 @@ class DownloadAnalyzer(BaseAnalyzer):
             if detection_count > 0:
                 return Finding(
                     description=(
-                        f"VirusTotal: low confidence — {detection_count} detection(s) "
+                        f"VirusTotal: low confidence - {detection_count} detection(s) "
                         f"out of {total} engines"
                     ),
                     score_contribution=5.0,
@@ -903,7 +903,7 @@ class DownloadAnalyzer(BaseAnalyzer):
                 )
 
             return Finding(
-                description=f"VirusTotal: clean — 0 detections out of {total} engines",
+                description=f"VirusTotal: clean - 0 detections out of {total} engines",
                 score_contribution=0.0,
                 severity="info",
             )

@@ -1,7 +1,7 @@
 """Tests for the VirusTotal "scanned engine" denominator.
 
 VirusTotal's displayed detection ratio (X / Y) counts only engines that
-returned a verdict — harmless / malicious / suspicious / undetected — not the
+returned a verdict - harmless / malicious / suspicious / undetected - not the
 type-unsupported / failure / timeout / confirmed-timeout buckets. Summing all
 of last_analysis_stats inflates the denominator (e.g. 44/74 instead of 44/56).
 """

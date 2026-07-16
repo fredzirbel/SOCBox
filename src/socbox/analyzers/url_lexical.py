@@ -194,7 +194,7 @@ class URLLexicalAnalyzer(BaseAnalyzer):
             brand_extracted = tldextract.extract(brand_fqdn)
             brand_name = brand_extracted.domain.lower()
 
-            # Skip exact matches — that's the real brand
+            # Skip exact matches - that's the real brand
             if domain == brand_name:
                 continue
 
@@ -313,7 +313,7 @@ class URLLexicalAnalyzer(BaseAnalyzer):
             )
 
         # Punycode/IDN labels (xn--) are ASCII on the wire but render as
-        # non-ASCII in the browser — a common homograph vector the plain
+        # non-ASCII in the browser - a common homograph vector the plain
         # non-ASCII check above misses (e.g. xn--pple-43d.com → "аpple.com").
         if any(label.startswith("xn--") for label in hostname.lower().split(".")):
             return Finding(

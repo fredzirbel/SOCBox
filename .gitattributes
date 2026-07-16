@@ -1,4 +1,4 @@
-# Shell scripts run inside the Linux container — they MUST keep LF endings, or
+# Shell scripts run inside the Linux container - they MUST keep LF endings, or
 # a Windows checkout (core.autocrlf=true) rewrites them to CRLF and bash fails
 # with "set: pipefail: invalid option name". Force LF regardless of git config.
 *.sh text eol=lf

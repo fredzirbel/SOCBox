@@ -1,8 +1,8 @@
 <div align="center">
 
-# SOC Box — The SOC Analyst's Toolbox
+# SOC Box - The SOC Analyst's Toolbox
 
-**The containerized SOC analyst toolbox — URL/phishing detonation, IP enrichment, KQL hunting queries, and more.**
+**The containerized SOC analyst toolbox: URL/phishing detonation, IP enrichment, and KQL hunting queries.**
 
 [![Docker Image](https://img.shields.io/badge/ghcr.io-fredzirbel%2Fsocbox-blue?logo=docker)](https://ghcr.io/fredzirbel/socbox)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
@@ -12,37 +12,24 @@
 
 ---
 
-SOC Box is a containerized toolbox for SOC analysts — a homepage hub of self-hosted apps for the pivots analysts make all day. Its flagship URL scanner detonates suspect links across 8 security dimensions simultaneously — lexical analysis, SSL certificates, WHOIS records, HTTP headers, page content, link discovery, file downloads, and threat intelligence feeds — and produces a weighted risk score with an interactive results dashboard streamed in real time. Alongside it: multi-source IP enrichment, a KQL hunting-query generator, and more tools on the way.
+SOC Box is a containerized toolbox for SOC analysts - a homepage hub of self-hosted apps for the pivots analysts make all day. Its flagship URL scanner detonates suspect links across 8 security dimensions simultaneously - lexical analysis, SSL certificates, WHOIS records, HTTP headers, page content, link discovery, file downloads, and threat intelligence feeds - and produces a weighted risk score with an interactive results dashboard streamed in real time. Alongside it: multi-source IP enrichment and a KQL hunting-query generator.
 
 ## Features
 
-### Analyst Tools
-
-- **URL Scanner** (`/`) — the flagship tool: detonates a suspect link across **8 security analyzers** running concurrently on the URL, network, and content layers, streams results in real time over SSE, and renders a **3-tier verdict** (Safe / Uncertain / Malicious) with weighted confidence percentages
-  - **In-Browser CAPTCHA Solving** — pauses on an un-automatable CAPTCHA and surfaces the live detonation browser to the analyst (CLI on-screen, or transparent self-hosted noVNC takeover in the web UI); clearance is captured once and replayed across the scan
+- **URL Scanner** (`/`) - the flagship tool: detonates a suspect link across **8 security analyzers** running concurrently on the URL, network, and content layers, streams results in real time over SSE, and renders a **3-tier verdict** (Safe / Uncertain / Malicious) with weighted confidence percentages
+  - **In-Browser CAPTCHA Solving** - pauses on an un-automatable CAPTCHA and surfaces the live detonation browser to the analyst (CLI on-screen, or transparent self-hosted noVNC takeover in the web UI); clearance is captured once and replayed across the scan
   - **Playwright-based Screenshot Capture** with URL banner overlay and redirect detection
-  - **Active Link Discovery** — clicks sign-in/login buttons to find hidden credential harvesters
-  - **File Download Analysis** — detects automatic downloads, computes SHA-1 and SHA-256, queries VirusTotal
-  - **Threat Feed Integration** — VirusTotal (severity-aware detection scaling), Google Safe Browsing, AbuseIPDB
-  - **Clickable Threat Labels** — VT threat labels link to OSINT search for malware family research
-  - **OSINT Link Panel** — one-click links to VirusTotal (including redirect hops), URLScan.io, AbuseIPDB, and more
-  - **Cloudflare Bypass** — navigates past Cloudflare phishing interstitials for analysis
-  - **DNS-over-HTTPS Fallback** — resolves domains blocked by ISP/router DNS filters
-- **Bulk Scan** (`/bulk`) — scan many URLs concurrently (up to 8 parallel workers, default 5) with progress tracking
-- **IP Enrichment** (`/tools/ip`) — one paste, concurrent reputation/geo/ASN lookups across VirusTotal, AbuseIPDB, IPinfo, and an optional local MaxMind GeoLite2 database, with copyable OSINT pivot links; sources degrade gracefully when unconfigured
-- **KQL Generator** (`/tools/kql`) — turns any indicator (IP, domain, URL, file hash, email) into ready-to-paste Microsoft Defender XDR / Sentinel Advanced Hunting queries via deterministic templates
-- **Per-Scan Hunt Queries** — every URL scan can emit KQL tailored to its findings: URL-click and email-delivery pivots, anomalous sign-in queries for phishing verdicts, and file-hash/hosting pivots for malicious downloads
-- **"Copy Claude prompt" pattern** — for reasoning steps (bespoke hunts, verdicts), SOC Box stays deterministic and instead assembles a purpose-built prompt the analyst pastes into their own Claude seat; no external LLM calls from the platform
-- **Roadmap** — Command Deobfuscator (nested base64/hex/gzip/char-code unwinding with ATT&CK technique tagging) and Email Header Analyzer (SPF/DKIM/DMARC, hop chain, spoofing checks) are next
-
-### Platform
-
-- **Authenticated & Hardened** — OIDC SSO for analysts + bearer service tokens for the agent, an SSRF guard, and rate limiting (see [Security](#security--hardening))
-- **REST API** — synchronous and async JSON endpoints for SOAR playbook integration
-- **Defanged IOC Display** — all URLs rendered as `hxxps://example[.]com` for safe sharing
-- **Copy Report** — one-click clipboard export of full reports; per-field copy buttons for IOCs
-- **Dark-themed Web UI** with collapsible sections and mobile-responsive layout
-- **CLI Mode** for scripted/automated scanning
+  - **Active Link Discovery** - clicks sign-in/login buttons to find hidden credential harvesters
+  - **File Download Analysis** - detects automatic downloads, computes SHA-1 and SHA-256, queries VirusTotal
+  - **Threat Feed Integration** - VirusTotal (severity-aware detection scaling), Google Safe Browsing, AbuseIPDB
+  - **Clickable Threat Labels** - VT threat labels link to OSINT search for malware family research
+  - **OSINT Link Panel** - one-click links to VirusTotal (including redirect hops), URLScan.io, AbuseIPDB, and more
+  - **Cloudflare Bypass** - navigates past Cloudflare phishing interstitials for analysis
+  - **DNS-over-HTTPS Fallback** - resolves domains blocked by ISP/router DNS filters
+- **Bulk Scan** (`/bulk`) - scan many URLs concurrently (up to 8 parallel workers, default 5) with progress tracking
+- **IP Enrichment** (`/tools/ip`) - one paste, concurrent reputation/geo/ASN lookups across VirusTotal, AbuseIPDB, IPinfo, and an optional local MaxMind GeoLite2 database, with copyable OSINT pivot links; sources degrade gracefully when unconfigured
+- **KQL Generator** (`/tools/kql`) - turns any indicator (IP, domain, URL, file hash, email) into ready-to-paste Microsoft Defender XDR / Sentinel Advanced Hunting queries via deterministic templates
+- **Per-Scan Hunt Queries** - every URL scan can emit KQL tailored to its findings: URL-click and email-delivery pivots, anomalous sign-in queries for phishing verdicts, and file-hash/hosting pivots for malicious downloads
 
 ## Quick Start
 
@@ -99,19 +86,19 @@ docker run -p 8080:8000 --shm-size=2g \
 
 ## Scoring
 
-SOC Box uses a **dual-signal scoring engine** that blends analyzer scores (45%) with threat feed results (55%) into a final 0–100 risk score. Feed scoring is **severity-aware** — a URL flagged by 20 VirusTotal engines scores far higher than one with 3 detections, rather than treating all matches equally.
+SOC Box uses a **dual-signal scoring engine** that blends analyzer scores (45%) with threat feed results (55%) into a final 0-100 risk score. Feed scoring is **severity-aware** - a URL flagged by 20 VirusTotal engines scores far higher than one with 3 detections, rather than treating all matches equally.
 
 Threat feeds contribute once through the blended feed signal (not double-counted through analyzer weighting).
 
 | Score | Category | Meaning |
 |-------|----------|---------|
-| 0–25 | **Safe** | No significant indicators detected |
-| 26–59 | **Uncertain** | Some anomalies — investigate further before taking action |
-| 60–100 | **Malicious** | Strong phishing indicators or confirmed by threat intelligence |
+| 0-25 | **Safe** | No significant indicators detected |
+| 26-59 | **Uncertain** | Some anomalies - investigate further before taking action |
+| 60-100 | **Malicious** | Strong phishing indicators or confirmed by threat intelligence |
 
 Special categories exist for file download threats: **Malicious File Download** and **Suspicious File Download**.
 
-**Confidence** is tuned for SOC analyst clarity: Malicious verdicts report **100% confidence**; a **Safe** verdict scales with how much evidence was gathered (a full scan → 100%, but a thin scan where the site was unreachable and only lexical analysis ran → lower, so a green verdict built on sparse data is visibly less certain); **Uncertain** scales **30–80%** on a U-curve (higher near decision boundaries, lowest in the ambiguous middle).
+**Confidence** is tuned for SOC analyst clarity: Malicious verdicts report **100% confidence**; a **Safe** verdict scales with how much evidence was gathered (a full scan → 100%, but a thin scan where the site was unreachable and only lexical analysis ran → lower, so a green verdict built on sparse data is visibly less certain); **Uncertain** scales **30-80%** on a U-curve (higher near decision boundaries, lowest in the ambiguous middle).
 
 **Feed floor enforcement** prevents strong VirusTotal signals from being diluted into "Safe" when other feeds (GSB, AbuseIPDB) haven't indexed the campaign yet. For example, 10+ VT detections enforce a minimum composite score of 65 (Malicious).
 
@@ -121,13 +108,13 @@ Threat feed matches are weighted individually (VirusTotal 40%, Google Safe Brows
 
 SOC Box fetches attacker-controlled URLs server-side and renders their content back to analysts, so it is built to sit safely inside a SOC:
 
-- **Authentication** — analysts sign in via **OIDC SSO** (Azure AD / Okta); the AI triage agent / SOAR authenticates with **bearer service tokens**. A fail-closed, SSE-safe ASGI middleware gates every page, `/api/*`, `/stream`, and `/screenshots`. `auth.mode` ∈ {`oidc`, `dev`, `disabled`}; `dev` auto-login requires `SOCBOX_AUTH_DEV=1`.
-- **SSRF guard** — every scan target is resolved and rejected if it lands on a private / loopback / link-local / cloud-metadata address. The DoH resolution fallback and the async webhook `callback_url` are held to the same check, so neither can be used to reach internal services.
-- **Rate limiting** — scan endpoints are capped per service token / client IP.
-- **XSS-safe reporting** — the analyst-facing report is rendered safely even when the scanned page's own content (filenames, page text, evidence) is hostile.
-- **Secure headers** — CSP, `X-Frame-Options`, `nosniff`, and `Referrer-Policy` on every response.
-- **Secrets via env only** — `SOCBOX_SESSION_SECRET`, `SOCBOX_OIDC_CLIENT_SECRET`, `SOCBOX_API_TOKENS`; never committed.
-- **CI** — `ruff`, `bandit`, `pip-audit`, and `gitleaks` run on every change.
+- **Authentication** - analysts sign in via **OIDC SSO** (Azure AD / Okta); the AI triage agent / SOAR authenticates with **bearer service tokens**. A fail-closed, SSE-safe ASGI middleware gates every page, `/api/*`, `/stream`, and `/screenshots`. `auth.mode` ∈ {`oidc`, `dev`, `disabled`}; `dev` auto-login requires `SOCBOX_AUTH_DEV=1`.
+- **SSRF guard** - every scan target is resolved and rejected if it lands on a private / loopback / link-local / cloud-metadata address. The DoH resolution fallback and the async webhook `callback_url` are held to the same check, so neither can be used to reach internal services.
+- **Rate limiting** - scan endpoints are capped per service token / client IP.
+- **XSS-safe reporting** - the analyst-facing report is rendered safely even when the scanned page's own content (filenames, page text, evidence) is hostile.
+- **Secure headers** - CSP, `X-Frame-Options`, `nosniff`, and `Referrer-Policy` on every response.
+- **Secrets via env only** - `SOCBOX_SESSION_SECRET`, `SOCBOX_OIDC_CLIENT_SECRET`, `SOCBOX_API_TOKENS`; never committed.
+- **CI** - `ruff`, `bandit`, `pip-audit`, and `gitleaks` run on every change.
 
 ## Architecture
 
@@ -159,20 +146,20 @@ SOC Box fetches attacker-controlled URLs server-side and renders their content b
 - **Thread pool analyzers** run concurrently (network I/O bound)
 - **Playwright analyzers** run sequentially on a dedicated thread (browser-bound)
 - **Deferred analyzers** get a browser fallback pass after the thread pool finishes
-- **Thread-local browser pool** — each scan worker thread (up to 8, default 5) maintains its own persistent Playwright/Chromium instance, enabling concurrent scans while avoiding greenlet conflicts
+- **Thread-local browser pool** - each scan worker thread (up to 8, default 5) maintains its own persistent Playwright/Chromium instance, enabling concurrent scans while avoiding greenlet conflicts
 - **Screenshots** are captured immediately after page content analysis while the page is fresh
 
 ## OSINT Links
 
 Each scan report includes one-click links to external tools for deeper investigation:
 
-- **VirusTotal (URL)** — URL reputation lookup
-- **VirusTotal (Domain)** — domain reputation and history
-- **VirusTotal (Redirect Hops)** — individual URL and domain lookups for each unique redirect in the chain
-- **Google Transparency Report** — Safe Browsing status
-- **URLScan.io** — live site scan
-- **who.is** — WHOIS registration lookup
-- **AbuseIPDB** — IP abuse history (when IP is resolved)
+- **VirusTotal (URL)** - URL reputation lookup
+- **VirusTotal (Domain)** - domain reputation and history
+- **VirusTotal (Redirect Hops)** - individual URL and domain lookups for each unique redirect in the chain
+- **Google Transparency Report** - Safe Browsing status
+- **URLScan.io** - live site scan
+- **who.is** - WHOIS registration lookup
+- **AbuseIPDB** - IP abuse history (when IP is resolved)
 
 ## Configuration
 
@@ -222,7 +209,7 @@ socbox -c config/local.yaml https://example.com
 
 ### Importing test URLs from threat feeds
 
-Pull recent **live** malicious URLs from public feeds (via their official APIs —
+Pull recent **live** malicious URLs from public feeds (via their official APIs -
 no scraping) to feed into a scan or the Bulk Scan box:
 
 ```bash
@@ -238,7 +225,7 @@ socbox-feeds --source openphish --limit 30 --output urls.txt
 
 URLhaus requires a free abuse.ch Auth-Key (https://auth.abuse.ch) in
 `api_keys.urlhaus` (config/local.yaml) or the `URLHAUS_AUTH_KEY` env var. Output
-is one URL per line on stdout — treat it as live malicious infrastructure.
+is one URL per line on stdout - treat it as live malicious infrastructure.
 
 ## API Endpoints
 
@@ -258,8 +245,8 @@ is one URL per line on stdout — treat it as live malicious infrastructure.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/scan` | Start an async scan — returns `{"scan_id": "..."}` for SSE streaming |
-| `POST` | `/api/scan/sync` | Run a synchronous scan — blocks and returns complete JSON results |
+| `POST` | `/api/scan` | Start an async scan - returns `{"scan_id": "..."}` for SSE streaming |
+| `POST` | `/api/scan/sync` | Run a synchronous scan - blocks and returns complete JSON results |
 | `GET` | `/api/results/{scan_id}` | Retrieve completed scan results as JSON (includes defanged URLs) |
 | `POST` | `/api/hash-lookup` | Manual SHA-256 hash lookup via VirusTotal |
 | `POST` | `/api/bulk` | Create or update a bulk scan session |
@@ -271,14 +258,14 @@ is one URL per line on stdout — treat it as live malicious infrastructure.
 
 ### v1 TAP API (agent / SOAR)
 
-Stable, machine-friendly URL actions — a SlashNext-style TAP contract. Every
+Stable, machine-friendly URL actions - a SlashNext-style TAP contract. Every
 response includes the **final landing URL**. Each action accepts `{"url": ...}`
 (runs a scan) or `?scan_id=` (reuses an existing scan).
 
 | Method | Endpoint | Returns |
 |--------|----------|---------|
 | `POST` | `/api/v1/url/scan` | Full result: verdict, `suggested_disposition`, score, `final_url`, `text`, `screenshot_url`, classifications |
-| `POST` | `/api/v1/url/text` | `{final_url, text}` — visible text of the final landing page |
+| `POST` | `/api/v1/url/text` | `{final_url, text}` - visible text of the final landing page |
 | `POST` | `/api/v1/url/screenshot` | `{final_url, screenshot_url}` |
 | `POST` | `/api/v1/url/threat-intel` | `{final_url, verdict, suggested_disposition, score, confidence, classifications}` |
 | `POST` | `/api/v1/scan/{id}/disposition` | Record analyst disposition `{"disposition": "TP"\|"BTP"\|"FP", "analyst", "note"}` |
@@ -304,7 +291,7 @@ curl -X POST http://localhost:8080/api/v1/scan/async \
 ### SOAR Integration Example
 
 ```bash
-# Synchronous scan — blocks until complete (set timeout ≥ 120s)
+# Synchronous scan - blocks until complete (set timeout ≥ 120s)
 curl -X POST http://localhost:8080/api/scan/sync \
   -H "Content-Type: application/json" \
   -d '{"url": "https://suspicious-site.xyz"}'

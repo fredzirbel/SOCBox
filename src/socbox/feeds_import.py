@@ -1,7 +1,7 @@
 """Threat-intel feed importer for SOC Box.
 
 Pulls recent malicious URLs from public threat-intel feeds via their official
-APIs/feeds — never by scraping HTML — so an analyst can grab fresh, live
+APIs/feeds - never by scraping HTML - so an analyst can grab fresh, live
 samples to scan without manual copy-paste (or getting IP-banned by abuse.ch).
 
 Sources:
@@ -74,7 +74,7 @@ def fetch_urlhaus(
     """
     if not auth_key:
         raise ValueError(
-            "URLhaus Auth-Key required — set api_keys.urlhaus in config/local.yaml "
+            "URLhaus Auth-Key required - set api_keys.urlhaus in config/local.yaml "
             "or the URLHAUS_AUTH_KEY env var (free key: https://auth.abuse.ch)."
         )
 

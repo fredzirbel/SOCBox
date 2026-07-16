@@ -15,7 +15,7 @@ def vt_url_id(url: str) -> str:
     return base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
 
 
-# Categories VirusTotal counts in its displayed detection ratio — engines that
+# Categories VirusTotal counts in its displayed detection ratio - engines that
 # actually returned a verdict. Summing *all* of last_analysis_stats instead would
 # also count type-unsupported / failure / timeout / confirmed-timeout, inflating
 # the denominator above the "X / Y" VT itself shows.

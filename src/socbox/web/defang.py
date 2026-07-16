@@ -42,7 +42,7 @@ def defang(url: str) -> str:
         after_scheme = scheme_end + 3
         slash_pos = result.find("/", after_scheme)
         if slash_pos == -1:
-            # No path — defang all dots in the domain
+            # No path - defang all dots in the domain
             domain = result[after_scheme:]
             result = result[:after_scheme] + domain.replace(".", "[.]")
         else:
@@ -50,7 +50,7 @@ def defang(url: str) -> str:
             path = result[slash_pos:]
             result = result[:after_scheme] + domain.replace(".", "[.]") + path
     else:
-        # No scheme — could be bare domain or IP.
+        # No scheme - could be bare domain or IP.
         slash_pos = result.find("/")
         if slash_pos == -1:
             result = result.replace(".", "[.]")

@@ -2,10 +2,7 @@
 
 Turns a set of indicators (IP / domain / URL / file hash / email) into
 ready-to-paste Microsoft Defender XDR + Sentinel Advanced Hunting queries via
-deterministic templates — not tied to a scan, so analysts can pivot on any IOC.
-It also assembles a copy-ready prompt for the analyst's own Claude seat when
-they want a bespoke hunt beyond the templates (no third-party API call from
-SOC Box itself).
+deterministic templates - not tied to a scan, so analysts can pivot on any IOC.
 
 The per-scan escalation queries live in ``socbox.web.escalation``; this shares its
 ``_kql_str`` escaper so attacker-controlled values (filenames, domains) can't
@@ -240,52 +237,10 @@ def generate(indicators: dict[str, list[str]]) -> list[dict[str, str]]:
     return out
 
 
-def claude_prompt(indicators: dict[str, list[str]], goal: str) -> str:
-    """Assemble a copy-ready prompt for the analyst's own Claude seat.
-
-    SOC Box makes no API call — this is text the analyst pastes into their existing
-    Claude Enterprise chat for a bespoke hunt beyond the deterministic templates.
-    """
-    lines = [
-        "You are a senior SOC analyst writing Microsoft Defender XDR Advanced "
-        "Hunting (KQL) queries. Note Sentinel table equivalents where they differ.",
-        "",
-        "Indicators:",
-    ]
-    labels = {
-        "ips": "IPs", "domains": "Domains", "urls": "URLs",
-        "sha256": "SHA256", "sha1": "SHA1", "md5": "MD5", "emails": "Emails",
-    }
-    any_ind = False
-    for t in _TYPES:
-        vals = indicators.get(t, [])
-        if vals:
-            any_ind = True
-            lines.append(f"- {labels[t]}: {', '.join(vals)}")
-    if not any_ind:
-        lines.append("- (none supplied — infer suitable placeholders)")
-
-    lines += [
-        "",
-        f"Hunt goal: {goal.strip() or 'Find any activity involving these indicators.'}",
-        "",
-        "Requirements:",
-        "- Return each query in its own fenced ```kql code block with a one-line "
-        "description above it.",
-        "- Use the indicators above verbatim.",
-        f"- Scope to the last {_LOOKBACK} unless the goal says otherwise.",
-        "- Prefer DeviceNetworkEvents / DeviceProcessEvents / DeviceFileEvents / "
-        "EmailEvents / EmailUrlInfo / UrlClickEvents / SigninLogs / "
-        "IdentityLogonEvents as appropriate.",
-    ]
-    return "\n".join(lines)
-
-
-def generate_from_text(text: str, goal: str = "") -> dict[str, Any]:
-    """Convenience wrapper: classify a blob, then build queries + Claude prompt."""
+def generate_from_text(text: str) -> dict[str, Any]:
+    """Convenience wrapper: classify a blob, then build queries."""
     indicators = classify_indicators(text)
     return {
         "indicators": indicators,
         "queries": generate(indicators),
-        "claude_prompt": claude_prompt(indicators, goal),
     }

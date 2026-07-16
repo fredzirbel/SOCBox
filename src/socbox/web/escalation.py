@@ -47,7 +47,7 @@ def _kql_str(value: str) -> str:
 
 
 def _url_delivery_queries(domain: str) -> list[dict[str, str]]:
-    """URL-click + email-delivery queries — relevant to any scanned URL."""
+    """URL-click + email-delivery queries - relevant to any scanned URL."""
     domain = _kql_str(domain)
     return [
         _kql(
@@ -174,7 +174,7 @@ def generate_kql_queries(
     Args:
         domain: The domain from the scanned URL (e.g. ``"evil.com"``).
         url: The full scanned URL (kept for future per-URL queries).
-        category: The scan verdict (``RiskCategory.value``) — selects the
+        category: The scan verdict (``RiskCategory.value``) - selects the
             query set (download verdicts get endpoint queries instead of a
             sign-in query).
         file_download: File-download metadata (``sha256`` / ``filename``) used
@@ -187,7 +187,7 @@ def generate_kql_queries(
     is_download = category in _DOWNLOAD_CATEGORIES
 
     # URL-click + email-delivery queries apply to every scanned URL (and to
-    # downloads too — the file arrived via a link/email).
+    # downloads too - the file arrived via a link/email).
     queries = _url_delivery_queries(domain)
 
     if is_download:

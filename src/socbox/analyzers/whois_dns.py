@@ -174,7 +174,7 @@ class WhoisDNSAnalyzer(BaseAnalyzer):
 
         # Reverse DNS (PTR) checking was intentionally removed: it relied on the
         # OS resolver (ignoring the configured DNS servers), routinely stalled
-        # several seconds before timing out, and produced near-zero signal —
+        # several seconds before timing out, and produced near-zero signal -
         # modern phishing is overwhelmingly CDN-fronted, where PTR records are
         # absent or shared and a "mismatch" means nothing.
 
