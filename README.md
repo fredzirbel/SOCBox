@@ -2,7 +2,7 @@
 
 # SOC Box — The SOC Analyst's Toolbox
 
-**The containerized SOC analyst toolbox — URL analysis, phishing detection, and threat assessment.**
+**The containerized SOC analyst toolbox — URL/phishing detonation, IP enrichment, KQL hunting queries, and more.**
 
 [![Docker Image](https://img.shields.io/badge/ghcr.io-fredzirbel%2Fsocbox-blue?logo=docker)](https://ghcr.io/fredzirbel/socbox)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
@@ -14,28 +14,21 @@
 
 SOC Box is a containerized toolbox for SOC analysts — a homepage hub of self-hosted apps for the pivots analysts make all day. Its flagship URL scanner detonates suspect links across 8 security dimensions simultaneously — lexical analysis, SSL certificates, WHOIS records, HTTP headers, page content, link discovery, file downloads, and threat intelligence feeds — and produces a weighted risk score with an interactive results dashboard streamed in real time. Alongside it: multi-source IP enrichment, a KQL hunting-query generator, and more tools on the way.
 
-> **Formerly IRIS.** This project was renamed from IRIS (Intelligent Risk Inspection System) as its scope grew beyond URL analysis. Old GitHub links redirect automatically; container images now publish as `ghcr.io/fredzirbel/socbox`.
-
 ## Features
-
-### URL & Phishing Analysis
-
-- **8 Security Analyzers** running concurrently across URL, network, and content layers
-- **3-Tier Scoring** — Safe / Uncertain / Malicious with weighted confidence percentages
-- **Real-time SSE Streaming** — results appear progressively as each analyzer completes
-- **In-Browser CAPTCHA Solving** — pauses on an un-automatable CAPTCHA and surfaces the live detonation browser to the analyst (CLI on-screen, or transparent self-hosted noVNC takeover in the web UI); clearance is captured once and replayed across the scan
-- **Bulk Scanning** — scan many URLs concurrently (up to 8 parallel workers, default 5) with progress tracking
-- **Playwright-based Screenshot Capture** with URL banner overlay and redirect detection
-- **Active Link Discovery** — clicks sign-in/login buttons to find hidden credential harvesters
-- **File Download Analysis** — detects automatic downloads, computes SHA-1 and SHA-256, queries VirusTotal
-- **Threat Feed Integration** — VirusTotal (severity-aware detection scaling), Google Safe Browsing, AbuseIPDB
-- **Clickable Threat Labels** — VT threat labels link to OSINT search for malware family research
-- **OSINT Link Panel** — one-click links to VirusTotal (including redirect hops), URLScan.io, AbuseIPDB, and more
-- **Cloudflare Bypass** — navigates past Cloudflare phishing interstitials for analysis
-- **DNS-over-HTTPS Fallback** — resolves domains blocked by ISP/router DNS filters
 
 ### Analyst Tools
 
+- **URL Scanner** (`/`) — the flagship tool: detonates a suspect link across **8 security analyzers** running concurrently on the URL, network, and content layers, streams results in real time over SSE, and renders a **3-tier verdict** (Safe / Uncertain / Malicious) with weighted confidence percentages
+  - **In-Browser CAPTCHA Solving** — pauses on an un-automatable CAPTCHA and surfaces the live detonation browser to the analyst (CLI on-screen, or transparent self-hosted noVNC takeover in the web UI); clearance is captured once and replayed across the scan
+  - **Playwright-based Screenshot Capture** with URL banner overlay and redirect detection
+  - **Active Link Discovery** — clicks sign-in/login buttons to find hidden credential harvesters
+  - **File Download Analysis** — detects automatic downloads, computes SHA-1 and SHA-256, queries VirusTotal
+  - **Threat Feed Integration** — VirusTotal (severity-aware detection scaling), Google Safe Browsing, AbuseIPDB
+  - **Clickable Threat Labels** — VT threat labels link to OSINT search for malware family research
+  - **OSINT Link Panel** — one-click links to VirusTotal (including redirect hops), URLScan.io, AbuseIPDB, and more
+  - **Cloudflare Bypass** — navigates past Cloudflare phishing interstitials for analysis
+  - **DNS-over-HTTPS Fallback** — resolves domains blocked by ISP/router DNS filters
+- **Bulk Scan** (`/bulk`) — scan many URLs concurrently (up to 8 parallel workers, default 5) with progress tracking
 - **IP Enrichment** (`/tools/ip`) — one paste, concurrent reputation/geo/ASN lookups across VirusTotal, AbuseIPDB, IPinfo, and an optional local MaxMind GeoLite2 database, with copyable OSINT pivot links; sources degrade gracefully when unconfigured
 - **KQL Generator** (`/tools/kql`) — turns any indicator (IP, domain, URL, file hash, email) into ready-to-paste Microsoft Defender XDR / Sentinel Advanced Hunting queries via deterministic templates
 - **Per-Scan Hunt Queries** — every URL scan can emit KQL tailored to its findings: URL-click and email-delivery pivots, anomalous sign-in queries for phishing verdicts, and file-hash/hosting pivots for malicious downloads
