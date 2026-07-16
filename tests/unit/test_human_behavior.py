@@ -4,7 +4,7 @@ invisible / score-based challenge pass rates (reCAPTCHA v3, Turnstile).
 
 from __future__ import annotations
 
-import iris.browser as browser
+import socbox.browser as browser
 
 
 class _FakeMouse:

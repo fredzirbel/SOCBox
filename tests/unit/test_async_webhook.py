@@ -6,7 +6,7 @@ import json
 
 import responses
 
-from iris.web import app as webapp
+from socbox.web import app as webapp
 
 
 @responses.activate

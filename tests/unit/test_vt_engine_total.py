@@ -8,7 +8,7 @@ of last_analysis_stats inflates the denominator (e.g. 44/74 instead of 44/56).
 
 from __future__ import annotations
 
-from iris.feeds.virustotal import scanned_engine_total
+from socbox.feeds.virustotal import scanned_engine_total
 
 
 def test_excludes_non_verdict_categories() -> None:

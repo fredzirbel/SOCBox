@@ -1,5 +1,5 @@
 # =============================================================================
-# IRIS — Docker Compose
+# SOC Box — Docker Compose
 # =============================================================================
 #
 # Quick start:
@@ -16,9 +16,9 @@
 # =============================================================================
 
 services:
-  iris:
+  socbox:
     build: .
-    container_name: iris
+    container_name: socbox
     ports:
       # host 8080 -> container 8000 (8080 sidesteps Windows reserved ports)
       - "8080:8000"
@@ -34,11 +34,11 @@ services:
       - VNC_PASSWORD=${VNC_PASSWORD:-}
       # Auth secrets (never bake into the image). In oidc mode the app refuses
       # to start unless the OIDC + session secrets are present. For a local
-      # spin-up without an IdP, set IRIS_AUTH_DEV=1 (INSECURE auto-login).
-      - IRIS_AUTH_DEV=${IRIS_AUTH_DEV:-}
-      - IRIS_SESSION_SECRET=${IRIS_SESSION_SECRET:-}
-      - IRIS_OIDC_CLIENT_SECRET=${IRIS_OIDC_CLIENT_SECRET:-}
-      - IRIS_API_TOKENS=${IRIS_API_TOKENS:-}
+      # spin-up without an IdP, set SOCBOX_AUTH_DEV=1 (INSECURE auto-login).
+      - SOCBOX_AUTH_DEV=${SOCBOX_AUTH_DEV:-}
+      - SOCBOX_SESSION_SECRET=${SOCBOX_SESSION_SECRET:-}
+      - SOCBOX_OIDC_CLIENT_SECRET=${SOCBOX_OIDC_CLIENT_SECRET:-}
+      - SOCBOX_API_TOKENS=${SOCBOX_API_TOKENS:-}
 
     # Chrome needs more than the default 64 MB shared memory
     shm_size: "2gb"

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from iris.web.escalation import generate_kql_queries
+from socbox.web.escalation import generate_kql_queries
 
 
 def _names(queries: list[dict]) -> set[str]:

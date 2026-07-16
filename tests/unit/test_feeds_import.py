@@ -1,11 +1,11 @@
-"""Tests for the threat-intel feed importer (iris.feeds_import)."""
+"""Tests for the threat-intel feed importer (socbox.feeds_import)."""
 
 from __future__ import annotations
 
 import pytest
 import responses
 
-from iris.feeds_import import (
+from socbox.feeds_import import (
     OPENPHISH_FEED,
     URLHAUS_RECENT_API,
     fetch_openphish,

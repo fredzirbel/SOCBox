@@ -1,5 +1,5 @@
-from iris.models import AnalyzerResult, AnalyzerStatus, FeedResult, RiskCategory
-from iris.scoring import calculate_score, score_breakdown
+from socbox.models import AnalyzerResult, AnalyzerStatus, FeedResult, RiskCategory
+from socbox.scoring import calculate_score, score_breakdown
 
 
 def _config() -> dict:

@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import json
 
-from iris.analyzers.url_lexical import URLLexicalAnalyzer
-from iris.classification import classify
-from iris.dns_util import is_public_ip
-from iris.models import AnalyzerResult, AnalyzerStatus, RiskCategory
-from iris.scoring import _calculate_confidence
-from iris.web.app import _json_script_safe
-from iris.web.escalation import generate_kql_queries
+from socbox.analyzers.url_lexical import URLLexicalAnalyzer
+from socbox.classification import classify
+from socbox.dns_util import is_public_ip
+from socbox.models import AnalyzerResult, AnalyzerStatus, RiskCategory
+from socbox.scoring import _calculate_confidence
+from socbox.web.app import _json_script_safe
+from socbox.web.escalation import generate_kql_queries
 
 _THRESHOLDS = {"safe": 25, "malicious": 60}
 

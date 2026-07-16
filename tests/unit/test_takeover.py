@@ -1,7 +1,7 @@
 """Tests for the transparent noVNC CAPTCHA-solve takeover plumbing.
 
 Covers the two non-browser-bound pieces:
-  1. Per-scan, thread-local control state in ``iris.browser`` — an interactive /
+  1. Per-scan, thread-local control state in ``socbox.browser`` — an interactive /
      human-present scan must not leak its mode onto a concurrent headless scan.
   2. The app-side noVNC session token + view_url helpers that gate the live
      viewer. (The headed/noVNC paths themselves are container-bound and covered
@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import threading
 
-import iris.browser as browser
-import iris.web.app as app
+import socbox.browser as browser
+import socbox.web.app as app
 
 # ---------------------------------------------------------------------------
 # Thread-local control state isolation

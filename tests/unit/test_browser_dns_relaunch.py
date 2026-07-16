@@ -10,7 +10,7 @@ come back empty). These tests pin that behaviour.
 
 from __future__ import annotations
 
-import iris.scanner as scanner
+import socbox.scanner as scanner
 
 
 class _FakeBrowser:

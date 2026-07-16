@@ -1,6 +1,6 @@
-from iris.analyzers.base import BaseAnalyzer
-from iris.models import AnalyzerResult, AnalyzerStatus
-from iris.scanner import scan_url
+from socbox.analyzers.base import BaseAnalyzer
+from socbox.models import AnalyzerResult, AnalyzerStatus
+from socbox.scanner import scan_url
 
 
 class _LexicalAnalyzer(BaseAnalyzer):
@@ -51,14 +51,14 @@ def _config() -> dict:
 
 def test_passive_mode_skips_network_and_browser_analyzers(monkeypatch) -> None:
     monkeypatch.setattr(
-        "iris.scanner.ALL_ANALYZERS",
+        "socbox.scanner.ALL_ANALYZERS",
         [_LexicalAnalyzer, _HTTPAnalyzer],
     )
 
     def _fail_get_browser(_url: str):
         raise AssertionError("Browser should not be initialized in passive mode")
 
-    monkeypatch.setattr("iris.scanner._get_browser", _fail_get_browser)
+    monkeypatch.setattr("socbox.scanner._get_browser", _fail_get_browser)
 
     report = scan_url(
         "https://example.com",

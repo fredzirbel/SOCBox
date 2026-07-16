@@ -1,10 +1,10 @@
 <div align="center">
 
-# IRIS — Intelligent Risk Inspection System
+# SOC Box — The SOC Analyst's Toolbox
 
-**Containerized URL analysis platform for phishing detection and threat assessment.**
+**The containerized SOC analyst toolbox — URL analysis, phishing detection, and threat assessment.**
 
-[![Docker Image](https://img.shields.io/badge/ghcr.io-fredzirbel%2Firis-blue?logo=docker)](https://ghcr.io/fredzirbel/iris)
+[![Docker Image](https://img.shields.io/badge/ghcr.io-fredzirbel%2Fsocbox-blue?logo=docker)](https://ghcr.io/fredzirbel/socbox)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -12,19 +12,19 @@
 
 ---
 
-IRIS scans URLs across 8 security dimensions simultaneously — lexical analysis, SSL certificates, WHOIS records, HTTP headers, page content, link discovery, file downloads, and threat intelligence feeds — then produces a weighted risk score with an interactive results dashboard streamed in real time.
+SOC Box is a containerized toolbox for SOC analysts — a homepage hub of self-hosted apps for the pivots analysts make all day. Its flagship URL scanner detonates suspect links across 8 security dimensions simultaneously — lexical analysis, SSL certificates, WHOIS records, HTTP headers, page content, link discovery, file downloads, and threat intelligence feeds — and produces a weighted risk score with an interactive results dashboard streamed in real time. Alongside it: multi-source IP enrichment, a KQL hunting-query generator, and more tools on the way.
+
+> **Formerly IRIS.** This project was renamed from IRIS (Intelligent Risk Inspection System) as its scope grew beyond URL analysis. Old GitHub links redirect automatically; container images now publish as `ghcr.io/fredzirbel/socbox`.
 
 ## Features
+
+### URL & Phishing Analysis
 
 - **8 Security Analyzers** running concurrently across URL, network, and content layers
 - **3-Tier Scoring** — Safe / Uncertain / Malicious with weighted confidence percentages
 - **Real-time SSE Streaming** — results appear progressively as each analyzer completes
 - **In-Browser CAPTCHA Solving** — pauses on an un-automatable CAPTCHA and surfaces the live detonation browser to the analyst (CLI on-screen, or transparent self-hosted noVNC takeover in the web UI); clearance is captured once and replayed across the scan
-- **Authenticated & Hardened** — OIDC SSO for analysts + bearer service tokens for the agent, an SSRF guard, and rate limiting (see [Security](#security--hardening))
 - **Bulk Scanning** — scan many URLs concurrently (up to 8 parallel workers, default 5) with progress tracking
-- **REST API** — synchronous and async JSON endpoints for SOAR playbook integration
-- **Defanged IOC Display** — all URLs rendered as `hxxps://example[.]com` for safe sharing
-- **Copy Report** — one-click clipboard export of full reports; per-field copy buttons for IOCs
 - **Playwright-based Screenshot Capture** with URL banner overlay and redirect detection
 - **Active Link Discovery** — clicks sign-in/login buttons to find hidden credential harvesters
 - **File Download Analysis** — detects automatic downloads, computes SHA-1 and SHA-256, queries VirusTotal
@@ -33,6 +33,21 @@ IRIS scans URLs across 8 security dimensions simultaneously — lexical analysis
 - **OSINT Link Panel** — one-click links to VirusTotal (including redirect hops), URLScan.io, AbuseIPDB, and more
 - **Cloudflare Bypass** — navigates past Cloudflare phishing interstitials for analysis
 - **DNS-over-HTTPS Fallback** — resolves domains blocked by ISP/router DNS filters
+
+### Analyst Tools
+
+- **IP Enrichment** (`/tools/ip`) — one paste, concurrent reputation/geo/ASN lookups across VirusTotal, AbuseIPDB, IPinfo, and an optional local MaxMind GeoLite2 database, with copyable OSINT pivot links; sources degrade gracefully when unconfigured
+- **KQL Generator** (`/tools/kql`) — turns any indicator (IP, domain, URL, file hash, email) into ready-to-paste Microsoft Defender XDR / Sentinel Advanced Hunting queries via deterministic templates
+- **Per-Scan Hunt Queries** — every URL scan can emit KQL tailored to its findings: URL-click and email-delivery pivots, anomalous sign-in queries for phishing verdicts, and file-hash/hosting pivots for malicious downloads
+- **"Copy Claude prompt" pattern** — for reasoning steps (bespoke hunts, verdicts), SOC Box stays deterministic and instead assembles a purpose-built prompt the analyst pastes into their own Claude seat; no external LLM calls from the platform
+- **Roadmap** — Command Deobfuscator (nested base64/hex/gzip/char-code unwinding with ATT&CK technique tagging) and Email Header Analyzer (SPF/DKIM/DMARC, hop chain, spoofing checks) are next
+
+### Platform
+
+- **Authenticated & Hardened** — OIDC SSO for analysts + bearer service tokens for the agent, an SSRF guard, and rate limiting (see [Security](#security--hardening))
+- **REST API** — synchronous and async JSON endpoints for SOAR playbook integration
+- **Defanged IOC Display** — all URLs rendered as `hxxps://example[.]com` for safe sharing
+- **Copy Report** — one-click clipboard export of full reports; per-field copy buttons for IOCs
 - **Dark-themed Web UI** with collapsible sections and mobile-responsive layout
 - **CLI Mode** for scripted/automated scanning
 
@@ -43,7 +58,7 @@ IRIS scans URLs across 8 security dimensions simultaneously — lexical analysis
 Pull and run the pre-built image:
 
 ```bash
-docker run -p 8080:8000 --shm-size=2g ghcr.io/fredzirbel/iris:latest
+docker run -p 8080:8000 --shm-size=2g ghcr.io/fredzirbel/socbox:latest
 ```
 
 Open **http://localhost:8080** and paste a URL to scan.
@@ -53,8 +68,8 @@ Open **http://localhost:8080** and paste a URL to scan.
 For full threat feed integration:
 
 ```bash
-git clone https://github.com/fredzirbel/IRIS.git
-cd IRIS
+git clone https://github.com/fredzirbel/SOCBox.git
+cd SOCBox
 cp config/default.yaml config/local.yaml
 ```
 
@@ -73,7 +88,7 @@ docker run -p 8080:8000 --shm-size=2g \
   -e VIRUSTOTAL_API_KEY=your_key \
   -e GOOGLE_SAFEBROWSING_API_KEY=your_key \
   -e ABUSEIPDB_API_KEY=your_key \
-  ghcr.io/fredzirbel/iris:latest
+  ghcr.io/fredzirbel/socbox:latest
 ```
 
 ## Analyzers
@@ -91,7 +106,7 @@ docker run -p 8080:8000 --shm-size=2g \
 
 ## Scoring
 
-IRIS uses a **dual-signal scoring engine** that blends analyzer scores (45%) with threat feed results (55%) into a final 0–100 risk score. Feed scoring is **severity-aware** — a URL flagged by 20 VirusTotal engines scores far higher than one with 3 detections, rather than treating all matches equally.
+SOC Box uses a **dual-signal scoring engine** that blends analyzer scores (45%) with threat feed results (55%) into a final 0–100 risk score. Feed scoring is **severity-aware** — a URL flagged by 20 VirusTotal engines scores far higher than one with 3 detections, rather than treating all matches equally.
 
 Threat feeds contribute once through the blended feed signal (not double-counted through analyzer weighting).
 
@@ -111,14 +126,14 @@ Threat feed matches are weighted individually (VirusTotal 40%, Google Safe Brows
 
 ## Security & Hardening
 
-IRIS fetches attacker-controlled URLs server-side and renders their content back to analysts, so it is built to sit safely inside a SOC:
+SOC Box fetches attacker-controlled URLs server-side and renders their content back to analysts, so it is built to sit safely inside a SOC:
 
-- **Authentication** — analysts sign in via **OIDC SSO** (Azure AD / Okta); the AI triage agent / SOAR authenticates with **bearer service tokens**. A fail-closed, SSE-safe ASGI middleware gates every page, `/api/*`, `/stream`, and `/screenshots`. `auth.mode` ∈ {`oidc`, `dev`, `disabled`}; `dev` auto-login requires `IRIS_AUTH_DEV=1`.
+- **Authentication** — analysts sign in via **OIDC SSO** (Azure AD / Okta); the AI triage agent / SOAR authenticates with **bearer service tokens**. A fail-closed, SSE-safe ASGI middleware gates every page, `/api/*`, `/stream`, and `/screenshots`. `auth.mode` ∈ {`oidc`, `dev`, `disabled`}; `dev` auto-login requires `SOCBOX_AUTH_DEV=1`.
 - **SSRF guard** — every scan target is resolved and rejected if it lands on a private / loopback / link-local / cloud-metadata address. The DoH resolution fallback and the async webhook `callback_url` are held to the same check, so neither can be used to reach internal services.
 - **Rate limiting** — scan endpoints are capped per service token / client IP.
 - **XSS-safe reporting** — the analyst-facing report is rendered safely even when the scanned page's own content (filenames, page text, evidence) is hostile.
 - **Secure headers** — CSP, `X-Frame-Options`, `nosniff`, and `Referrer-Policy` on every response.
-- **Secrets via env only** — `IRIS_SESSION_SECRET`, `IRIS_OIDC_CLIENT_SECRET`, `IRIS_API_TOKENS`; never committed.
+- **Secrets via env only** — `SOCBOX_SESSION_SECRET`, `SOCBOX_OIDC_CLIENT_SECRET`, `SOCBOX_API_TOKENS`; never committed.
 - **CI** — `ruff`, `bandit`, `pip-audit`, and `gitleaks` run on every change.
 
 ## Architecture
@@ -196,20 +211,20 @@ api_keys:
 
 ## CLI Usage
 
-IRIS also supports command-line scanning:
+SOC Box also supports command-line scanning:
 
 ```bash
 # Basic scan
-iris https://example.com
+socbox https://example.com
 
 # Verbose output with all findings
-iris -v https://suspicious-site.xyz
+socbox -v https://suspicious-site.xyz
 
 # Passive-only mode (lexical-only; no network/browser analyzers)
-iris --no-active https://example.com
+socbox --no-active https://example.com
 
 # Custom config file
-iris -c config/local.yaml https://example.com
+socbox -c config/local.yaml https://example.com
 ```
 
 ### Importing test URLs from threat feeds
@@ -219,13 +234,13 @@ no scraping) to feed into a scan or the Bulk Scan box:
 
 ```bash
 # 20 recent online malware URLs from URLhaus (needs api_keys.urlhaus)
-iris-feeds --source urlhaus --limit 20
+socbox-feeds --source urlhaus --limit 20
 
 # Filter by URLhaus tag, e.g. ClearFake / Mozi
-iris-feeds --source urlhaus --tag ClearFake --limit 10
+socbox-feeds --source urlhaus --tag ClearFake --limit 10
 
 # OpenPhish phishing feed (no key required); save to a file
-iris-feeds --source openphish --limit 30 --output urls.txt
+socbox-feeds --source openphish --limit 30 --output urls.txt
 ```
 
 URLhaus requires a free abuse.ch Auth-Key (https://auth.abuse.ch) in
@@ -243,6 +258,8 @@ is one URL per line on stdout — treat it as live malicious infrastructure.
 | `GET` | `/results/{scan_id}` | Full results page (static mode) |
 | `GET` | `/results/{scan_id}?stream=1` | Results page with live SSE streaming |
 | `GET` | `/stream/{scan_id}` | SSE event stream for real-time results |
+| `GET` | `/tools/ip` | IP enrichment tool |
+| `GET` | `/tools/kql` | KQL hunting-query generator |
 
 ### REST API
 
@@ -254,6 +271,10 @@ is one URL per line on stdout — treat it as live malicious infrastructure.
 | `POST` | `/api/hash-lookup` | Manual SHA-256 hash lookup via VirusTotal |
 | `POST` | `/api/bulk` | Create or update a bulk scan session |
 | `GET` | `/api/bulk/{bulk_id}` | Retrieve a cached bulk scan session |
+| `POST` | `/api/enrich/ip` | Multi-source IP enrichment (VirusTotal, AbuseIPDB, IPinfo, optional GeoLite2) |
+| `POST` | `/api/tools/kql` | Generate Defender XDR / Sentinel KQL from pasted indicators |
+| `GET` | `/api/kql/{scan_id}` | KQL hunting queries tailored to a completed scan's findings |
+| `GET` | `/api/feeds/import` | Pull live malicious test URLs from URLhaus / OpenPhish |
 
 ### v1 TAP API (agent / SOAR)
 
@@ -284,7 +305,7 @@ curl -X POST http://localhost:8080/api/v1/url/scan \
 # Fire-and-forget with a completion webhook
 curl -X POST http://localhost:8080/api/v1/scan/async \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://suspicious-site.xyz","callback_url":"https://soar.internal/iris-hook"}'
+  -d '{"url":"https://suspicious-site.xyz","callback_url":"https://soar.internal/socbox-hook"}'
 ```
 
 ### SOAR Integration Example
@@ -304,8 +325,8 @@ curl http://localhost:8080/api/results/abc123def456
 ### Local Setup
 
 ```bash
-git clone https://github.com/fredzirbel/IRIS.git
-cd IRIS
+git clone https://github.com/fredzirbel/SOCBox.git
+cd SOCBox
 python -m venv .venv
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -e ".[dev]"

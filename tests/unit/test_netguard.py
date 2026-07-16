@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from iris.netguard import target_block_reason as block
+from socbox.netguard import target_block_reason as block
 
 
 def test_blocks_loopback_and_localhost() -> None:

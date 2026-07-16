@@ -1,24 +1,24 @@
-# IRIS Analyst Tools — Build Handoff
+# SOC Box Analyst Tools — Build Handoff
 
 **Purpose:** hand this file to a fresh chat to continue the "Analyst Tools" initiative.
 Read `PROJECT.md` first (living architecture/run doc), then this. Next task: build the
 **Command Deobfuscator** (spec at the bottom), following the established pattern.
 
-- **Repo:** github.com/fredzirbel/IRIS (`main`, all work pushed) · **Local:** `C:\Users\Freddy\Desktop\Projects\Projects\IRIS`
+- **Repo:** github.com/fredzirbel/SOCBox (`main`, all work pushed) · **Local:** `C:\Users\Freddy\Desktop\Projects\SOCBox`
 - **Owner:** Fred Zirbel — Senior Security Analyst, Critical Start.
 
 ---
 
 ## The initiative
 
-Add SOC analyst tools to IRIS as a **homepage hub of separate "apps."** Four were scoped;
+Add SOC analyst tools to SOC Box as a **homepage hub of separate "apps."** Four were scoped;
 the analyst pastes an artifact and gets analyst-ready, copyable output. Build order: IP
 enricher → KQL generator → **Command Deobfuscator (next)** → Email Header Analyzer.
 
 ### Two decisions that shape everything
 1. **No bespoke Claude API integration.** The analysts have their own **Claude Enterprise
    seats**, and the public API is a separate purchase + a new data-governance boundary. So
-   for any AI-reasoning step (deobfuscator verdict, freeform KQL, alert triage), IRIS stays
+   for any AI-reasoning step (deobfuscator verdict, freeform KQL, alert triage), SOC Box stays
    deterministic/self-hosted and emits a **"Copy Claude prompt"** button — a purpose-built
    prompt + the artifact the analyst pastes into their own Claude seat. **Do not add the
    `anthropic` SDK or any external LLM call.**
@@ -33,8 +33,8 @@ enricher → KQL generator → **Command Deobfuscator (next)** → Email Header 
 |------|-------|--------|
 | URL Scan | `/` | shipped (pre-existing) |
 | Bulk Scan | `/bulk` | shipped (pre-existing) |
-| **IP Enrichment** | `/tools/ip` | ✅ done (`src/iris/enrich.py`, `templates/ip_enrich.html`, `test_enrich.py`) |
-| **KQL Generator** | `/tools/kql` | ✅ done (`src/iris/web/kql.py`, `templates/kql.html`, `test_kql.py`) |
+| **IP Enrichment** | `/tools/ip` | ✅ done (`src/socbox/enrich.py`, `templates/ip_enrich.html`, `test_enrich.py`) |
+| **KQL Generator** | `/tools/kql` | ✅ done (`src/socbox/web/kql.py`, `templates/kql.html`, `test_kql.py`) |
 | **Command Deobfuscator** | `/tools/deobfuscate` | ⬜ NEXT — spec below |
 | Email Header Analyzer | `/tools/email` | ⬜ after |
 
@@ -48,10 +48,10 @@ Tests: **132 passing**, ruff + bandit clean as of the KQL commit.
 
 ## The pattern to replicate (per tool)
 
-1. **Core module** — pure logic, no web deps. IP enricher lives at `src/iris/enrich.py`;
-   web-facing text tools (KQL) live under `src/iris/web/`. Deterministic, unit-testable,
+1. **Core module** — pure logic, no web deps. IP enricher lives at `src/socbox/enrich.py`;
+   web-facing text tools (KQL) live under `src/socbox/web/`. Deterministic, unit-testable,
    returns plain dicts.
-2. **Routes in `src/iris/web/app.py`** — a `GET /tools/<name>` page route returning
+2. **Routes in `src/socbox/web/app.py`** — a `GET /tools/<name>` page route returning
    `templates.TemplateResponse(request, "<name>.html", {})`, and a `POST /api/tools/<name>`
    (or `/api/enrich/ip`-style) JSON endpoint. Scan-style endpoints get `@limiter.limit(_scan_rate_limit)`.
 3. **Template** — `templates/<name>.html`, `{% extends "base.html" %}`, `{% block content %}`,
@@ -68,7 +68,7 @@ Tests: **132 passing**, ruff + bandit clean as of the KQL commit.
 ### Conventions
 - **Escaping:** JS side uses the `esc()` helper (create span, set `textContent`, read
   `innerHTML`). Server side, KQL/command strings that embed IOCs use
-  `iris.web.escalation._kql_str` (escapes `\ " \r \n`). Never interpolate attacker text raw.
+  `socbox.web.escalation._kql_str` (escapes `\ " \r \n`). Never interpolate attacker text raw.
 - **Defang for display** (`1[.]2[.]3[.]4`), refang on input (`.replace("[.]",".")`, `hxxp`→`http`, `[at]`→`@`).
 - **Copy-to-Claude:** build the prompt server-side as plain text, return it in the JSON,
   copy it with a button. See `kql.claude_prompt()` for the shape.
@@ -81,9 +81,9 @@ Tests: **132 passing**, ruff + bandit clean as of the KQL commit.
 
 ```powershell
 # Dev server (PowerShell). Port 8000 is unusable (WinNAT 7908-8007); use 8017.
-cd C:\Users\Freddy\Desktop\Projects\Projects\IRIS
-$env:IRIS_AUTH_DEV = "1"; $env:IRIS_PORT = "8017"
-.\.venv\Scripts\python.exe -m iris.web.app --no-reload    # Ctrl+C to stop
+cd C:\Users\Freddy\Desktop\Projects\SOCBox
+$env:SOCBOX_AUTH_DEV = "1"; $env:SOCBOX_PORT = "8017"
+.\.venv\Scripts\python.exe -m socbox.web.app --no-reload    # Ctrl+C to stop
 # then open http://localhost:8017  (--no-reload means restart to pick up new routes)
 ```
 
@@ -104,12 +104,12 @@ the port, kill it from PowerShell:
 ## NEXT: Command Deobfuscator (`/tools/deobfuscate`)
 
 **Goal:** analyst pastes an obfuscated one-liner (ClickFix payloads, `powershell -enc …`,
-`mshta`, `certutil -decode`, char-code arrays, base64/hex/gzip, possibly nested). IRIS
+`mshta`, `certutil -decode`, char-code arrays, base64/hex/gzip, possibly nested). SOC Box
 decodes/normalizes it deterministically, tags likely techniques (reuse
-`iris.classification` pattern banks), and offers a **"Copy Claude prompt"** for a verdict.
-**Egress-safe** — the string is already in hand; IRIS makes no network call.
+`socbox.classification` pattern banks), and offers a **"Copy Claude prompt"** for a verdict.
+**Egress-safe** — the string is already in hand; SOC Box makes no network call.
 
-### Core module: `src/iris/deobfuscate.py`
+### Core module: `src/socbox/deobfuscate.py`
 - `deobfuscate(text) -> dict` returning `{"layers": [...], "decoded": "<final>", "notes": [...]}`.
   Each layer records the transform applied (e.g. "base64 (UTF-16LE)", "gzip", "hex",
   "URL-decode", "char-code array") and its output, so the UI can show the unwind chain.
@@ -122,7 +122,7 @@ decodes/normalizes it deterministically, tags likely techniques (reuse
     `String.fromCharCode(...)`, **`FromBase64String`**, **`certutil -decode`** (treat payload as base64),
     optional **ROT13**.
   - Nesting: after each successful decode, re-scan the output for another layer.
-- `technique_tags(decoded, original) -> list[dict]` — reuse `iris.classification` signals
+- `technique_tags(decoded, original) -> list[dict]` — reuse `socbox.classification` signals
   (ClickFix `_RUN_DIALOG`/`_SHELL`, encoded-command markers, clipboard, drainer, etc.) mapped
   to ATT&CK ids. Keep it rule-based; **no verdict claim** (that's Claude's job).
 - `claude_prompt(original, decoded, tags) -> str` — assemble a prompt: "You are a senior SOC
@@ -148,7 +148,7 @@ decodes/normalizes it deterministically, tags likely techniques (reuse
 
 ### Tests: `tests/unit/test_deobfuscate.py`
 - PowerShell `-enc` UTF-16LE base64 → decoded command (use a real `-enc` sample from
-  `iris` history / `test_classification.py`'s `powershell -enc SQBFAFgA…`).
+  `socbox` history / `test_classification.py`'s `powershell -enc SQBFAFgA…`).
 - Nested (base64 of base64), hex, gzip, char-code array → correct final output.
 - Benign long base64 (e.g. a data-URI) does **not** produce a technique tag on its own
   (mirror the encoded-command FP fix already in `classification.py`).
@@ -165,6 +165,6 @@ Paste raw headers or a `.eml` → parse **SPF / DKIM / DMARC** (from `Authentica
 `Received` hop chain + per-hop delays, originating IP (→ pivot to `/tools/ip`), `Reply-To` vs
 `From` and **display-name spoofing**, and extract URLs (→ pivot to a scan) + attachment
 names/hashes. Pure stdlib `email` parsing (`email.parser.Parser`, `email.utils`); no new deps.
-Same pattern (module `src/iris/email_headers.py` or `src/iris/web/emailhdr.py`, routes, page,
+Same pattern (module `src/socbox/email_headers.py` or `src/socbox/web/emailhdr.py`, routes, page,
 flip card, nav, tests). Add "Copy report" (ticket-ready summary). No LLM needed, though a
 "Copy Claude prompt" for a phishing verdict is a nice optional add.

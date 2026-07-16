@@ -7,7 +7,7 @@ solve when interactive mode is enabled.
 
 from __future__ import annotations
 
-import iris.browser as browser
+import socbox.browser as browser
 
 
 class _FakePage:

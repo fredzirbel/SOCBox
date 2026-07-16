@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
-from iris.analyzers.ssl_tls import SSLTLSAnalyzer
+from socbox.analyzers.ssl_tls import SSLTLSAnalyzer
 
 
 def _make_cert(

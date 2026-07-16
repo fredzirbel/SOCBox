@@ -1,9 +1,9 @@
-"""Tests for threat classification (iris.classification.classify)."""
+"""Tests for threat classification (socbox.classification.classify)."""
 
 from __future__ import annotations
 
-from iris.classification import classify
-from iris.models import Finding
+from socbox.classification import classify
+from socbox.models import Finding
 
 
 def _ids(classifications) -> set[str]:

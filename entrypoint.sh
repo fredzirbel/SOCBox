@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# IRIS container entrypoint
+# SOC Box container entrypoint
 # =============================================================================
 # Brings up a *fixed* virtual display, exports it over noVNC, then launches the
 # app. The fixed display (vs. the previous `xvfb-run --auto-servernum`) lets
@@ -37,9 +37,9 @@ done
 # --- VNC server: export the display, localhost-only --------------------------
 vnc_args=(-display "${DISPLAY_NUM}" -forever -shared -localhost -bg -quiet -noxdamage)
 if [ -n "${VNC_PASSWORD:-}" ]; then
-    mkdir -p /run/iris
-    x11vnc -storepasswd "${VNC_PASSWORD}" /run/iris/vncpass >/dev/null 2>&1
-    vnc_args+=(-rfbauth /run/iris/vncpass)
+    mkdir -p /run/socbox
+    x11vnc -storepasswd "${VNC_PASSWORD}" /run/socbox/vncpass >/dev/null 2>&1
+    vnc_args+=(-rfbauth /run/socbox/vncpass)
 else
     echo "[entrypoint] WARNING: VNC_PASSWORD unset — starting x11vnc with no password" >&2
     vnc_args+=(-nopw)
@@ -50,4 +50,4 @@ x11vnc "${vnc_args[@]}"
 websockify --web=/usr/share/novnc "${NOVNC_PORT}" "localhost:${VNC_PORT}" &
 
 # --- The app -----------------------------------------------------------------
-exec python -m iris.web.app --no-reload
+exec python -m socbox.web.app --no-reload

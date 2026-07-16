@@ -1,4 +1,4 @@
-"""Tests for the DoH-aware HTTP request fallback in ``iris.dns_util``.
+"""Tests for the DoH-aware HTTP request fallback in ``socbox.dns_util``.
 
 The requests-based analyzers (HTTP, download, threat feeds) reach the target
 host through ``request_with_doh_fallback``.  When the system resolver fails
@@ -13,7 +13,7 @@ import socket
 
 import requests
 
-import iris.dns_util as dns_util
+import socbox.dns_util as dns_util
 
 
 class _FakeSession:

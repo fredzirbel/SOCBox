@@ -48,7 +48,7 @@ jobs:
         run: bandit -ll -r src
 
       - name: pip-audit (dependency CVEs)
-        # --skip-editable: the local 'iris' package isn't on PyPI. (No --strict:
+        # --skip-editable: the local 'socbox' package isn't on PyPI. (No --strict:
         # it still fails on a real CVE, just not on the un-auditable local pkg.)
         run: pip-audit --skip-editable --progress-spinner off
 

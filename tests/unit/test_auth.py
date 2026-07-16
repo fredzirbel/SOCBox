@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-import iris.web.app as app_module
-import iris.web.auth as auth
-from iris.web.app import app
+import socbox.web.app as app_module
+import socbox.web.auth as auth
+from socbox.web.app import app
 
 client = TestClient(app)
 

@@ -1,8 +1,8 @@
-"""Tests for the SQLite scan/disposition store (iris.store)."""
+"""Tests for the SQLite scan/disposition store (socbox.store)."""
 
 from __future__ import annotations
 
-import iris.store as store
+import socbox.store as store
 
 
 def _entry(scan_id: str = "abc") -> dict:

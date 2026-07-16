@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "iris"
+name = "socbox"
 version = "0.1.0"
-description = "IRIS — Intelligent Risk Inspection System"
+description = "SOC Box — The SOC Analyst's Toolbox"
 requires-python = ">=3.11"
 dependencies = [
     "requests>=2.31.0",
@@ -48,15 +48,15 @@ skips = ["B501"]
 exclude_dirs = ["tests"]
 
 [project.scripts]
-iris = "iris.cli:main"
-iris-web = "iris.web.app:main"
-iris-feeds = "iris.feeds_import:main"
+socbox = "socbox.cli:main"
+socbox-web = "socbox.web.app:main"
+socbox-feeds = "socbox.feeds_import:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-iris = ["**/*"]
+socbox = ["**/*"]
 
 [tool.ruff]
 line-length = 100

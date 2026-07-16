@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}SOC Box &mdash; Scan a URL{% endblock %}
+
+{% block content %}
+<style>
+  .tools { margin: 2.5rem 0 1rem; }
+  .tools h2 { font-family: var(--font-display); margin-bottom: 1rem; }
+  .tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
+  .tool-card {
+    display: block; text-decoration: none; color: var(--text);
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 1rem 1.1rem;
+    transition: border-color var(--transition), transform var(--transition);
+  }
+  a.tool-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .tool-card.disabled { opacity: .55; cursor: default; }
+  .tool-card .tc-top { display: flex; align-items: center; gap: .6rem; margin-bottom: .4rem; }
+  .tool-card .tc-icon { font-size: 1.35rem; line-height: 1; }
+  .tool-card .tc-name { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; }
+  .tool-card .tc-desc { color: var(--text-muted); font-size: .85rem; margin: 0; }
+  .tool-card .tc-soon {
+    margin-left: auto; font-size: .65rem; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--text-muted); border: 1px solid var(--border); border-radius: 999px; padding: .1rem .5rem;
+  }
+</style>
+<section class="hero">
+    <h1>Scan a URL</h1>
+    <p>Paste a URL below to analyze it across multiple security dimensions.</p>
+
+    <form action="/scan" method="post" class="scan-form" id="scanForm">
+        <input
+            type="text"
+            name="url"
+            placeholder="https://example.com"
+            required
+            autocomplete="off"
+            class="url-input"
+        >
+        <button type="submit" class="btn btn-primary" id="scanBtn">Scan</button>
+    </form>
+
+    <div class="spinner" id="spinner" style="display:none;">
+        <div class="spinner-ring"></div>
+        <p>Scanning&hellip; this may take a moment.</p>
+    </div>
+
+</section>
+
+<section class="tools">
+  <h2>Analyst Tools</h2>
+  <div class="tool-grid">
+    <a class="tool-card" href="/bulk">
+      <div class="tc-top"><span class="tc-icon">🗂️</span><span class="tc-name">Bulk Scan</span></div>
+      <p class="tc-desc">Scan many URLs at once, or import live feeds from URLhaus / OpenPhish.</p>
+    </a>
+    <a class="tool-card" href="/tools/ip">
+      <div class="tc-top"><span class="tc-icon">🌐</span><span class="tc-name">IP Enrichment</span></div>
+      <p class="tc-desc">Live VirusTotal, AbuseIPDB, IPinfo &amp; MaxMind lookups with copyable OSINT links.</p>
+    </a>
+    <a class="tool-card" href="/tools/kql">
+      <div class="tc-top"><span class="tc-icon">🔎</span><span class="tc-name">KQL Generator</span></div>
+      <p class="tc-desc">Build Defender / Sentinel Advanced Hunting queries from any indicator.</p>
+    </a>
+    <span class="tool-card disabled">
+      <div class="tc-top"><span class="tc-icon">🧬</span><span class="tc-name">Command Deobfuscator</span>
+        <span class="tc-soon">Soon</span></div>
+      <p class="tc-desc">Decode PowerShell / base64 / hex one-liners and get a verdict.</p>
+    </span>
+    <span class="tool-card disabled">
+      <div class="tc-top"><span class="tc-icon">📧</span><span class="tc-name">Email Header Analyzer</span>
+        <span class="tc-soon">Soon</span></div>
+      <p class="tc-desc">Parse SPF / DKIM / DMARC, hops &amp; spoofing; pivot URLs into a scan.</p>
+    </span>
+  </div>
+</section>
+
+{% if recent_scans %}
+<section class="recent">
+    <h2>Recent Scans</h2>
+    <table class="table recent-table">
+        <thead>
+            <tr>
+                <th>URL</th>
+                <th>Risk</th>
+                <th>Confidence</th>
+                <th>Report</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in recent_scans %}
+            <tr>
+                <td class="url-cell">{{ entry.report.url|defang }}</td>
+                <td>
+                    <span class="badge badge-{{ entry.report.risk_category.name | lower }}">
+                        {{ entry.report.risk_category.value }}
+                    </span>
+                </td>
+                <td>{{ "%.0f" | format(entry.report.confidence) }}%</td>
+                <td><a href="/results/{{ entry.scan_id }}" class="btn btn-sm">VIEW</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
+<script>
+    const urlInput = document.querySelector(".url-input");
+    urlInput.addEventListener("paste", function () {
+        requestAnimationFrame(function () { urlInput.value = urlInput.value.trim(); });
+    });
+    document.getElementById("scanForm").addEventListener("submit", function (e) {
+        e.preventDefault();
+        const url = urlInput.value.trim();
+        if (!url) return;
+
+        document.getElementById("scanBtn").disabled = true;
+        document.getElementById("spinner").style.display = "flex";
+
+        fetch("/api/scan", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            /* human_present: a single analyst is watching this scan, so if it
+               hits an un-automatable CAPTCHA the live noVNC solver can open. */
+            body: JSON.stringify({url: url, human_present: true}),
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.scan_id) {
+                window.location.href = "/results/" + data.scan_id + "?stream=1";
+            } else {
+                alert(data.error || "Scan failed");
+                document.getElementById("scanBtn").disabled = false;
+                document.getElementById("spinner").style.display = "none";
+            }
+        })
+        .catch(function (err) {
+            alert("Request failed: " + err.message);
+            document.getElementById("scanBtn").disabled = false;
+            document.getElementById("spinner").style.display = "none";
+        });
+    });
+</script>
+{% endblock %}

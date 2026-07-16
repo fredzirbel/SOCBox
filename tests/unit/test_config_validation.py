@@ -1,6 +1,6 @@
 import pytest
 
-from iris.config import _validate_scoring_config
+from socbox.config import _validate_scoring_config
 
 
 def _base_config() -> dict:

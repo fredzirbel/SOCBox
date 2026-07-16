@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from iris.web.kql import (
+from socbox.web.kql import (
     classify_indicators,
     claude_prompt,
     generate,

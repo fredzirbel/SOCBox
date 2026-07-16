@@ -16,7 +16,7 @@ plumbing are container-bound and verified live, not here.
 
 from __future__ import annotations
 
-import iris.browser as browser
+import socbox.browser as browser
 
 # ---------------------------------------------------------------------------
 # Fakes

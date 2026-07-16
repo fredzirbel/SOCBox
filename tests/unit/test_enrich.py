@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import iris.enrich as enrich
+import socbox.enrich as enrich
 
 _CFG = {
     "api_keys": {"virustotal": "k", "abuseipdb": "k", "ipinfo": "k"},

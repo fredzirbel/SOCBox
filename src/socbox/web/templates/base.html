@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SOC Box{% endblock %}</title>
+    <link rel="icon" type="image/png" href="/static/img/cs-favicon-32.png">
+
+    <!-- Apply the saved theme before first paint to avoid a flash. -->
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('socbox-theme') || 'dark';
+                document.documentElement.setAttribute('data-theme', t);
+            } catch (e) {}
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700&family=Saira+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v={{ static_v }}">
+    <style>
+        .nav-right .nav-link {
+            color: var(--text-muted); text-decoration: none; font-weight: 600;
+            font-size: .9rem; padding: .3rem .1rem; transition: color var(--transition);
+        }
+        .nav-right .nav-link:hover { color: var(--accent); }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="nav-brand" aria-label="Critical Start SOC Box — home">
+            <img src="/static/img/cs-mark-256.png" alt="Critical Start" class="brand-mark">
+            <span class="brand-text">
+                <span class="brand-cs">CRITICAL START</span>
+                <span class="brand-socbox">SOC Box</span>
+            </span>
+        </a>
+        <div class="nav-right">
+            <a href="/" class="nav-link">Scan</a>
+            <a href="/bulk" class="nav-link">Bulk</a>
+            <a href="/tools/ip" class="nav-link">IP Enrich</a>
+            <a href="/tools/kql" class="nav-link">KQL</a>
+            <span class="nav-tagline">The SOC Analyst's Toolbox</span>
+            <button id="theme-toggle" class="theme-toggle" type="button"
+                    aria-label="Toggle light and dark theme" title="Toggle theme">
+                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4"></circle>
+                    <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
+                </svg>
+            </button>
+        </div>
+    </nav>
+
+    <main class="container {% block container_class %}{% endblock %}">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <p>SOC Box v0.1.0 &mdash; The SOC Analyst's Toolbox</p>
+    </footer>
+
+    <!-- Screenshot lightbox (shared by streaming + static results views) -->
+    <div id="socbox-lightbox" class="lightbox" hidden>
+        <button class="lightbox-close" type="button" aria-label="Close">&times;</button>
+        <img class="lightbox-img" alt="Screenshot (enlarged)">
+    </div>
+
+    <script>
+        // Global handlers for screenshot zoom + "copy image link". Uses event
+        // delegation so it works for both the streamed (JS) and static (Jinja)
+        // results renderings without duplicating logic.
+        (function () {
+            var lb = document.getElementById("socbox-lightbox");
+            var lbImg = lb ? lb.querySelector(".lightbox-img") : null;
+            function closeLb() { if (lb) { lb.hidden = true; lbImg.src = ""; } }
+
+            document.addEventListener("click", function (e) {
+                var shot = e.target.closest && e.target.closest("img.screenshot-img");
+                if (shot && lb && lbImg) { lbImg.src = shot.src; lb.hidden = false; return; }
+
+                var dispBtn = e.target.closest && e.target.closest(".disp-btn");
+                if (dispBtn) {
+                    var bar = dispBtn.closest(".disposition-bar");
+                    var sid = bar && bar.getAttribute("data-scan-id");
+                    var status = bar && bar.querySelector(".disp-status");
+                    if (!sid) return;
+                    fetch("/api/v1/scan/" + encodeURIComponent(sid) + "/disposition", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ disposition: dispBtn.getAttribute("data-disp") }),
+                    }).then(function (r) { return r.json(); }).then(function (d) {
+                        if (d.error) { if (status) status.textContent = "Error: " + d.error; return; }
+                        bar.querySelectorAll(".disp-btn").forEach(function (b) {
+                            b.classList.toggle("active", b === dispBtn);
+                        });
+                        if (status) status.textContent = "Set: " + d.disposition.disposition;
+                    }).catch(function () { if (status) status.textContent = "Error saving"; });
+                    return;
+                }
+
+                var urlEl = e.target.closest && e.target.closest(".copy-url");
+                if (urlEl) {
+                    var txt = urlEl.getAttribute("data-copy") || urlEl.textContent;
+                    navigator.clipboard.writeText(txt).then(function () {
+                        var prev = urlEl.getAttribute("data-tooltip") || "Click to copy";
+                        urlEl.setAttribute("data-tooltip", "Copied!");
+                        setTimeout(function () { urlEl.setAttribute("data-tooltip", prev); }, 1500);
+                    }).catch(function () {});
+                    return;
+                }
+
+                var copyBtn = e.target.closest && e.target.closest(".copy-img-link");
+                if (copyBtn) {
+                    var path = copyBtn.getAttribute("data-img") || "";
+                    var full = path.indexOf("http") === 0 ? path : location.origin + path;
+                    navigator.clipboard.writeText(full).then(function () {
+                        var prev = copyBtn.textContent;
+                        copyBtn.textContent = "Copied!";
+                        setTimeout(function () { copyBtn.textContent = prev; }, 1500);
+                    }).catch(function () {});
+                    return;
+                }
+
+                if (lb && !lb.hidden &&
+                    (e.target === lb || e.target.closest(".lightbox-close") || e.target === lbImg)) {
+                    closeLb();
+                }
+            });
+            document.addEventListener("keydown", function (e) {
+                if (e.key === "Escape") closeLb();
+            });
+        })();
+    </script>
+
+    <script src="/static/theme.js?v={{ static_v }}"></script>
+</body>
+</html>

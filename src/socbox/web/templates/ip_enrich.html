@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}IP Enrichment — SOC Box{% endblock %}
+
+{% block content %}
+<style>
+  .tool-header h1 { font-family: var(--font-display); margin-bottom: .25rem; }
+  .tool-sub { color: var(--text-muted); margin-top: 0; max-width: 60ch; }
+  .tool-form textarea {
+    width: 100%; box-sizing: border-box; background: var(--bg-input);
+    color: var(--text); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: .6rem .8rem; font-family: var(--font-body); resize: vertical;
+  }
+  .tool-actions { display: flex; align-items: center; gap: .8rem; margin: .6rem 0 1.2rem; }
+  .tool-form .btn-primary {
+    background: var(--accent); color: var(--on-accent); border: none; cursor: pointer;
+    padding: .5rem 1.2rem; border-radius: var(--radius); font-weight: 600;
+  }
+  .tool-form .btn-primary:disabled { opacity: .6; cursor: default; }
+  .tool-status { color: var(--text-muted); font-size: .9rem; }
+  .btn-mini {
+    background: transparent; color: var(--accent); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: .15rem .5rem; font-size: .8rem; cursor: pointer;
+  }
+  .ip-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 1rem 1.1rem; margin-bottom: 1rem;
+  }
+  .ip-head { display: flex; align-items: center; gap: .8rem; margin-bottom: .8rem; }
+  .ip-name { font-family: var(--font-display); font-size: 1.15rem; font-weight: 700; }
+  .ip-muted, .ip-bad, .ip-muted { color: var(--text-muted); font-size: .85rem; }
+  .ip-bad { color: var(--red); }
+  .src-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem; }
+  .src-box { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); padding: .6rem .7rem; }
+  .src-title { font-weight: 700; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin-bottom: .4rem; }
+  .kv { display: flex; justify-content: space-between; gap: .8rem; font-size: .85rem; padding: .1rem 0; }
+  .kv .k { color: var(--text-muted); } .kv .v { text-align: right; word-break: break-word; }
+  .verdict { font-weight: 700; margin-bottom: .3rem; }
+  .verdict.ok { color: var(--green); } .verdict.warn { color: var(--yellow); } .verdict.bad { color: var(--red); }
+  .muted { color: var(--text-muted); font-size: .85rem; }
+  .src-link { display: inline-block; margin-top: .3rem; font-size: .8rem; }
+  .osint-row { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .9rem; }
+  .osint-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin-right: .2rem; }
+  .osint-chip { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 999px; padding: .2rem .7rem; font-size: .8rem; text-decoration: none; color: var(--accent); }
+</style>
+<section class="tool-header">
+  <h1>IP Enrichment</h1>
+  <p class="tool-sub">
+    Paste one or more IPs (or a whole alert blob — IPs are extracted and refanged).
+    Live lookups across VirusTotal, AbuseIPDB, IPinfo, and MaxMind, with copyable OSINT links.
+  </p>
+</section>
+
+<form id="ip-form" class="tool-form" autocomplete="off">
+  <textarea id="ip-input" rows="4" spellcheck="false"
+            placeholder="1.2.3.4, 8.8.8.8&#10;or paste raw alert text containing 45[.]134[.]26[.]7 …"></textarea>
+  <div class="tool-actions">
+    <button type="submit" class="btn-primary" id="ip-go">Enrich</button>
+    <span id="ip-status" class="tool-status"></span>
+  </div>
+</form>
+
+<div id="ip-results"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  function esc(s) {
+    var el = document.createElement("span");
+    el.textContent = (s === null || s === undefined) ? "" : String(s);
+    return el.innerHTML;
+  }
+  function defang(ip) { return String(ip || "").replace(/\./g, "[.]").replace(/:/g, "[:]"); }
+
+  function kv(label, value) {
+    if (value === "" || value === null || value === undefined) return "";
+    return '<div class="kv"><span class="k">' + esc(label) + '</span>' +
+           '<span class="v">' + esc(value) + '</span></div>';
+  }
+
+  function vtCard(s) {
+    if (!s || s.configured === false) return sourceBox("VirusTotal", '<span class="muted">no API key</span>');
+    if (s.error) return sourceBox("VirusTotal", '<span class="muted">' + esc(s.error) + '</span>');
+    if (s.found === false) return sourceBox("VirusTotal", '<span class="muted">not in dataset</span>');
+    var det = s.detections || 0, tot = s.total_engines || 0;
+    var cls = det > 0 ? "bad" : "ok";
+    var body = '<div class="verdict ' + cls + '">' + esc(det) + " / " + esc(tot) + " engines flagged</div>" +
+      kv("Reputation", s.reputation) + kv("AS owner", s.as_owner) +
+      kv("ASN", s.asn ? ("AS" + s.asn) : "") + kv("Country", s.country) + kv("Network", s.network) +
+      linkRow(s.link);
+    return sourceBox("VirusTotal", body);
+  }
+
+  function abuseCard(s) {
+    if (!s || s.configured === false) return sourceBox("AbuseIPDB", '<span class="muted">no API key</span>');
+    if (s.error) return sourceBox("AbuseIPDB", '<span class="muted">' + esc(s.error) + '</span>');
+    var conf = s.confidence || 0;
+    var cls = conf >= 50 ? "bad" : (conf > 0 ? "warn" : "ok");
+    var body = '<div class="verdict ' + cls + '">Abuse confidence: ' + esc(conf) + "%</div>" +
+      kv("Reports (90d)", s.total_reports) + kv("ISP", s.isp) + kv("Usage", s.usage_type) +
+      kv("Domain", s.domain) + kv("Country", s.country) + (s.is_tor ? kv("Tor exit", "yes") : "") +
+      kv("Last report", s.last_reported) + linkRow(s.link);
+    return sourceBox("AbuseIPDB", body);
+  }
+
+  function ipinfoCard(s) {
+    if (!s || s.configured === false) return sourceBox("IPinfo", '<span class="muted">unavailable</span>');
+    if (s.error) return sourceBox("IPinfo", '<span class="muted">' + esc(s.error) + '</span>');
+    var body = kv("Org", s.org) + kv("Hostname", s.hostname) +
+      kv("Location", [s.city, s.region, s.country].filter(Boolean).join(", ")) +
+      kv("Coords", s.loc) + kv("Timezone", s.timezone) + linkRow(s.link);
+    return sourceBox("IPinfo", body);
+  }
+
+  function maxmindCard(s) {
+    if (!s || s.configured === false) return "";
+    if (s.error) return sourceBox("MaxMind", '<span class="muted">' + esc(s.error) + '</span>');
+    var body = kv("Location", [s.city, s.subdivision, s.country].filter(Boolean).join(", ")) +
+      kv("Coords", (s.latitude != null && s.longitude != null) ? (s.latitude + ", " + s.longitude) : "");
+    return sourceBox("MaxMind", body);
+  }
+
+  function linkRow(url) {
+    if (!url) return "";
+    return '<a class="src-link" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">open ↗</a>';
+  }
+  function sourceBox(title, body) {
+    return '<div class="src-box"><div class="src-title">' + esc(title) + "</div>" + body + "</div>";
+  }
+
+  function osintLinks(links) {
+    if (!links || !links.length) return "";
+    var chips = links.map(function (l) {
+      return '<a class="osint-chip" href="' + esc(l.url) + '" target="_blank" rel="noopener noreferrer">' +
+             esc(l.name) + "</a>";
+    }).join("");
+    return '<div class="osint-row"><span class="osint-label">OSINT</span>' + chips +
+           '<button type="button" class="copy-links btn-mini">Copy links</button></div>';
+  }
+
+  function ipCard(r) {
+    if (r.valid === false) {
+      return '<div class="ip-card"><div class="ip-head"><span class="ip-name">' + esc(r.ip) +
+             '</span><span class="ip-bad">invalid IP</span></div></div>';
+    }
+    if (r.public === false) {
+      return '<div class="ip-card"><div class="ip-head"><span class="ip-name copy-url" data-copy="' +
+             esc(r.ip) + '" data-tooltip="Click to copy">' + esc(defang(r.ip)) +
+             '</span><span class="ip-muted">non-public</span></div>' +
+             '<p class="muted">' + esc(r.note || "") + "</p></div>";
+    }
+    var s = r.sources || {};
+    var head = '<div class="ip-head">' +
+      '<span class="ip-name copy-url" data-copy="' + esc(r.ip) + '" data-tooltip="Click to copy">' +
+      esc(defang(r.ip)) + "</span>" +
+      '<button type="button" class="copy-report btn-mini">Copy report</button></div>';
+    var grid = '<div class="src-grid">' + vtCard(s.virustotal) + abuseCard(s.abuseipdb) +
+      ipinfoCard(s.ipinfo) + maxmindCard(s.maxmind) + "</div>";
+    return '<div class="ip-card" data-ip="' + esc(r.ip) + '">' + head + grid +
+           osintLinks(r.osint_links) + "</div>";
+  }
+
+  function reportText(r) {
+    var s = r.sources || {};
+    var lines = ["IP: " + defang(r.ip)];
+    if (s.virustotal && s.virustotal.found) lines.push("VirusTotal: " + (s.virustotal.detections || 0) + "/" + (s.virustotal.total_engines || 0) + " engines; AS owner " + (s.virustotal.as_owner || "?") + "; country " + (s.virustotal.country || "?"));
+    if (s.abuseipdb && s.abuseipdb.found) lines.push("AbuseIPDB: " + (s.abuseipdb.confidence || 0) + "% confidence, " + (s.abuseipdb.total_reports || 0) + " reports; ISP " + (s.abuseipdb.isp || "?") + "; usage " + (s.abuseipdb.usage_type || "?"));
+    if (s.ipinfo && s.ipinfo.found) lines.push("IPinfo: " + (s.ipinfo.org || "?") + "; " + [s.ipinfo.city, s.ipinfo.region, s.ipinfo.country].filter(Boolean).join(", "));
+    (r.osint_links || []).forEach(function (l) { lines.push(l.name + ": " + l.url); });
+    return lines.join("\n");
+  }
+
+  var lastResults = [];
+  var form = document.getElementById("ip-form");
+  var input = document.getElementById("ip-input");
+  var status = document.getElementById("ip-status");
+  var out = document.getElementById("ip-results");
+  var btn = document.getElementById("ip-go");
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var text = input.value.trim();
+    if (!text) return;
+    btn.disabled = true; status.textContent = "Enriching…"; out.innerHTML = "";
+    fetch("/api/enrich/ip", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text }),
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      btn.disabled = false;
+      if (d.error) { status.textContent = "Error: " + d.error; return; }
+      lastResults = d.results || [];
+      status.textContent = lastResults.length + " IP(s)";
+      out.innerHTML = lastResults.map(ipCard).join("");
+    }).catch(function () { btn.disabled = false; status.textContent = "Request failed"; });
+  });
+
+  // Copy-report / copy-links (the copy-url handler lives in base.html).
+  out.addEventListener("click", function (e) {
+    var card = e.target.closest && e.target.closest(".ip-card");
+    if (!card) return;
+    var ip = card.getAttribute("data-ip");
+    var r = lastResults.filter(function (x) { return x.ip === ip; })[0];
+    if (!r) return;
+    if (e.target.classList.contains("copy-report")) {
+      navigator.clipboard.writeText(reportText(r)).then(function () {
+        e.target.textContent = "Copied!"; setTimeout(function () { e.target.textContent = "Copy report"; }, 1500);
+      }).catch(function () {});
+    } else if (e.target.classList.contains("copy-links")) {
+      var links = (r.osint_links || []).map(function (l) { return l.name + ": " + l.url; }).join("\n");
+      navigator.clipboard.writeText(links).then(function () {
+        e.target.textContent = "Copied!"; setTimeout(function () { e.target.textContent = "Copy links"; }, 1500);
+      }).catch(function () {});
+    }
+  });
+})();
+</script>
+{% endblock %}

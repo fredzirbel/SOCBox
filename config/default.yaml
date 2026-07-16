@@ -1,11 +1,11 @@
-# IRIS Configuration
+# SOC Box Configuration
 # Copy this file to config/local.yaml and fill in your API keys.
 
 api_keys:
   virustotal: ""
   google_safebrowsing: ""
   abuseipdb: ""
-  # abuse.ch Auth-Key (free, from https://auth.abuse.ch) — used by `iris-feeds`
+  # abuse.ch Auth-Key (free, from https://auth.abuse.ch) — used by `socbox-feeds`
   # to pull recent URLhaus URLs via the official API instead of scraping.
   urlhaus: ""
   # IPinfo token (free tier, from https://ipinfo.io) — used by the IP enricher
@@ -19,7 +19,7 @@ notifications:
   webhook_timeout: 10
 
 # Transparent in-browser CAPTCHA solving (self-hosted noVNC). When a single
-# analyst-initiated web scan hits an un-automatable CAPTCHA, IRIS surfaces the
+# analyst-initiated web scan hits an un-automatable CAPTCHA, SOC Box surfaces the
 # live detonation browser in the analyst's tab so they can solve it; the scan
 # then continues to the real landing page. Bulk / agent / async scans never
 # block on a human regardless of this setting.
@@ -54,12 +54,12 @@ bulk:
 # Analysts log in via OIDC SSO; the AI triage agent / SOAR uses bearer service
 # tokens. Every page, /api/*, /stream, and /screenshots requires a valid session
 # cookie OR bearer token. Secrets come from env, NEVER this committed file:
-#   IRIS_SESSION_SECRET        - signs the session cookie (generate 32+ random bytes)
-#   IRIS_OIDC_CLIENT_SECRET    - the OIDC app client secret
-#   IRIS_API_TOKENS            - comma-separated service tokens for the agent
+#   SOCBOX_SESSION_SECRET        - signs the session cookie (generate 32+ random bytes)
+#   SOCBOX_OIDC_CLIENT_SECRET    - the OIDC app client secret
+#   SOCBOX_API_TOKENS            - comma-separated service tokens for the agent
 auth:
   # oidc = SSO (production) | dev = INSECURE auto-login for local testing
-  #   (also requires IRIS_AUTH_DEV=1) | disabled = no auth (air-gapped only)
+  #   (also requires SOCBOX_AUTH_DEV=1) | disabled = no auth (air-gapped only)
   mode: oidc
   # Mark the session cookie Secure (HTTPS-only). Leave false for a plain-HTTP
   # internal/VPN deployment; set true in production behind TLS.
@@ -69,7 +69,7 @@ auth:
     discovery_url: ""
     client_id: ""
     scopes: "openid email profile"
-    # Public URL the IdP redirects back to, e.g. https://iris.internal/auth/callback
+    # Public URL the IdP redirects back to, e.g. https://socbox.internal/auth/callback
     redirect_url: ""
 
 # ── SSRF guard ───────────────────────────────────────────────────────────────

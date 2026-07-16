@@ -5,7 +5,7 @@ visibly advertises a pending download; a plain landing page is released early
 so it never stalls the scan. These tests pin that gating logic.
 """
 
-from iris.analyzers.download import DownloadAnalyzer
+from socbox.analyzers.download import DownloadAnalyzer
 
 
 class _FakePage:
