@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">SOC Box</title>
+  <defs>
+    <linearGradient id="g" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2dd4bf"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 4 56 14v18c0 14.1-9.8 23.6-24 28C17.8 55.6 8 46.1 8 32V14L32 4Z" fill="#0f172a" stroke="url(#g)" stroke-width="4"/>
+  <path d="M19 25h26M19 32h17M19 39h22" stroke="url(#g)" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="45" cy="39" r="4" fill="#2dd4bf"/>
+</svg>
