@@ -3,14 +3,14 @@
    ============================================================ */
 
 :root {
-    /* ---- Critical Start brand constants (theme-independent) ---- */
-    --cs-navy:         #004c97;
-    --cs-blue:         #0072b5;
-    --cs-blue-hover:   #005a91;
-    --cs-cyan:         #009cde;
-    --cs-orange:       #fa6614;
-    --cs-orange-hover: #e55d0f;
-    --cs-red:          #ef3340;
+    /* ---- SOC Box identity ---- */
+    --brand-ink:          #111827;
+    --brand-teal:         #2dd4bf;
+    --brand-teal-hover:   #5eead4;
+    --brand-violet:       #8b5cf6;
+    --brand-amber:        #f59e0b;
+    --brand-amber-hover:  #d97706;
+    --brand-rose:         #f43f5e;
 
     --font-display: "Saira Condensed", "Arial Narrow", system-ui, sans-serif;
     --font-body: "Nunito Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -29,26 +29,26 @@
     --border-strong:#33445a;
     --text:         #e6edf5;
     --text-muted:   #93a1b3;
-    --accent:       #009cde;
-    --accent-hover: #36b6ec;
-    --on-accent:    #04121d;
+    --accent:       #2dd4bf;
+    --accent-hover: #5eead4;
+    --on-accent:    #071713;
 
     --shadow:    0 6px 24px rgba(0,0,0,.45);
     --shadow-sm: 0 2px 10px rgba(0,0,0,.35);
-    --header-grad: linear-gradient(120deg, #0a1018 0%, #0e2236 100%);
-    --hero-glow: radial-gradient(circle at 50% -10%, rgba(0,156,222,.20), transparent 62%);
+    --header-grad: linear-gradient(120deg, #0a111d 0%, #142032 55%, #1d1740 100%);
+    --hero-glow: radial-gradient(circle at 50% -10%, rgba(45,212,191,.18), transparent 62%);
     --card-grad: linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,0));
 
     --green:    #22c55e;
     --yellow:   #eab308;
-    --orange:   #fa6614;
-    --red:      #ef3340;
+    --orange:   #f59e0b;
+    --red:      #f43f5e;
     --red-dark: #b91c1c;
 }
 
 /* ---- Light theme ---- */
 [data-theme="light"] {
-    --bg:           #f4f8fd;
+    --bg:           #f5f7fb;
     --bg-elev:      #ffffff;
     --bg-card:      #ffffff;
     --bg-input:     #ffffff;
@@ -56,19 +56,19 @@
     --border-strong:#c4cede;
     --text:         #1e1e1e;
     --text-muted:   #52525b;
-    --accent:       #0072b5;
-    --accent-hover: #005a91;
+    --accent:       #0f766e;
+    --accent-hover: #115e59;
     --on-accent:    #ffffff;
 
-    --shadow:    0 8px 28px rgba(0,76,151,.12);
-    --shadow-sm: 0 2px 10px rgba(0,76,151,.08);
-    --hero-glow: radial-gradient(circle at 50% -10%, rgba(0,114,181,.12), transparent 62%);
-    --card-grad: linear-gradient(180deg, rgba(0,76,151,.015), rgba(0,76,151,0));
+    --shadow:    0 8px 28px rgba(17,24,39,.12);
+    --shadow-sm: 0 2px 10px rgba(17,24,39,.08);
+    --hero-glow: radial-gradient(circle at 50% -10%, rgba(15,118,110,.12), transparent 62%);
+    --card-grad: linear-gradient(180deg, rgba(17,24,39,.015), rgba(17,24,39,0));
 
     --green:    #16a34a;
     --yellow:   #ca8a04;
-    --orange:   #fa6614;
-    --red:      #e22c3f;
+    --orange:   #d97706;
+    --red:      #e11d48;
     --red-dark: #b91c1c;
 }
 
@@ -107,7 +107,7 @@ h1, h2, h3, h4 {
 a { color: var(--accent); text-decoration: none; transition: color var(--transition); }
 a:hover { color: var(--accent-hover); }
 
-::selection { background: var(--cs-cyan); color: #04121d; }
+::selection { background: var(--brand-teal); color: #071713; }
 
 /* ---- Navbar ---- */
 
@@ -118,8 +118,8 @@ a:hover { color: var(--accent-hover); }
     gap: 1rem;
     padding: 0.7rem 2rem;
     background: var(--header-grad);
-    border-bottom: 1px solid rgba(0, 156, 222, 0.28);
-    box-shadow: 0 1px 0 rgba(0,156,222,.08), var(--shadow-sm);
+    border-bottom: 1px solid rgba(45, 212, 191, 0.28);
+    box-shadow: 0 1px 0 rgba(45,212,191,.08), var(--shadow-sm);
     position: sticky;
     top: 0;
     z-index: 100;
@@ -135,19 +135,21 @@ a:hover { color: var(--accent-hover); }
     width: 34px;
     height: 34px;
     display: block;
-    filter: drop-shadow(0 0 10px rgba(0, 156, 222, 0.35));
+    filter: drop-shadow(0 0 10px rgba(45, 212, 191, 0.3));
     transition: transform var(--transition-slow);
 }
 .nav-brand:hover .brand-mark { transform: rotate(-8deg) scale(1.06); }
 
 .brand-text { display: flex; flex-direction: column; line-height: 1; }
 
-.brand-cs {
+.brand-tag {
     font-family: var(--font-display);
     font-weight: 600;
     font-size: 0.78rem;
-    letter-spacing: 0.18em;
-    color: #cfe8f7;
+    letter-spacing: 0.14em;
+    color: #a7b4c5;
+    text-transform: uppercase;
+    margin-top: .15rem;
 }
 
 .brand-socbox {
@@ -155,7 +157,7 @@ a:hover { color: var(--accent-hover); }
     font-weight: 700;
     font-size: 1.4rem;
     letter-spacing: 0.06em;
-    background: linear-gradient(90deg, var(--cs-cyan), #7fd6f5);
+    background: linear-gradient(90deg, var(--brand-teal), #c4b5fd);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -176,16 +178,16 @@ a:hover { color: var(--accent-hover); }
     width: 38px;
     height: 38px;
     border-radius: 50%;
-    border: 1px solid rgba(0,156,222,.35);
-    background: rgba(0, 156, 222, 0.08);
+    border: 1px solid rgba(45,212,191,.35);
+    background: rgba(45, 212, 191, 0.08);
     color: #cfe8f7;
     cursor: pointer;
     transition: background var(--transition), transform var(--transition),
                 border-color var(--transition);
 }
 .theme-toggle:hover {
-    background: rgba(0, 156, 222, 0.18);
-    border-color: var(--cs-cyan);
+    background: rgba(45, 212, 191, 0.18);
+    border-color: var(--brand-teal);
     transform: translateY(-1px);
 }
 .theme-toggle svg { width: 18px; height: 18px; }
@@ -247,7 +249,7 @@ a:hover { color: var(--accent-hover); }
     text-transform: uppercase;
     letter-spacing: 0.04em;
     margin-bottom: 0.5rem;
-    background: linear-gradient(90deg, var(--text), var(--cs-cyan) 140%);
+    background: linear-gradient(90deg, var(--text), var(--brand-teal) 140%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -280,7 +282,7 @@ a:hover { color: var(--accent-hover); }
 
 .url-input:focus {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(0, 156, 222, 0.18);
+    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.18);
 }
 
 /* ---- Buttons ---- */
@@ -301,21 +303,21 @@ a:hover { color: var(--accent-hover); }
 }
 
 .btn-primary {
-    background: linear-gradient(120deg, var(--cs-cyan) 0%, var(--cs-blue) 100%);
-    box-shadow: 0 4px 14px rgba(0, 156, 222, 0.30);
+    background: linear-gradient(120deg, var(--brand-teal) 0%, var(--brand-violet) 100%);
+    box-shadow: 0 4px 14px rgba(45, 212, 191, 0.30);
 }
 
 .btn-primary:hover {
     color: #fff;
     transform: translateY(-2px);
-    box-shadow: 0 8px 22px rgba(0, 156, 222, 0.42);
+    box-shadow: 0 8px 22px rgba(45, 212, 191, 0.42);
     filter: brightness(1.05);
 }
 .btn-primary:active { transform: translateY(0); }
 
-/* Orange call-to-action, matching Critical Start's CTA accent. */
+/* High-emphasis action used for analyst decisions. */
 .btn-cta {
-    background: linear-gradient(120deg, var(--cs-orange) 0%, var(--cs-orange-hover) 100%);
+    background: linear-gradient(120deg, var(--brand-amber) 0%, var(--brand-amber-hover) 100%);
     box-shadow: 0 4px 14px rgba(250, 102, 20, 0.32);
 }
 .btn-cta:hover {
@@ -1530,7 +1532,7 @@ a.vt-threat-label:hover {
 }
 
 /* ============================================================
-   Critical Start rebrand - motion & polish
+   SOC Box motion & polish
    ============================================================ */
 
 @keyframes fadeUp {
@@ -1572,7 +1574,7 @@ main.container { animation: fadeUp .5s var(--transition-slow) both; }
     width: 64px;
     margin: 0 auto 0.75rem;
     border-radius: 2px;
-    background: linear-gradient(90deg, var(--cs-cyan), var(--cs-orange));
+    background: linear-gradient(90deg, var(--brand-teal), var(--brand-violet));
 }
 
 /* Honor users who prefer reduced motion */
@@ -1626,14 +1628,14 @@ main.container { animation: fadeUp .5s var(--transition-slow) both; }
 [data-theme="light"] .badge-suspicious_download,
 [data-theme="light"] .score-suspicious_download,
 [data-theme="light"] .rec-suspicious_download { background: #ffedd5; color: #c2410c; }
-[data-theme="light"] .rec-suspicious_download { border-left-color: #fa6614; }
+[data-theme="light"] .rec-suspicious_download { border-left-color: #d97706; }
 
 [data-theme="light"] .badge-status-skipped,
 [data-theme="light"] .badge-vt-unknown    { background: #eaf1f9; color: #52525b; }
 
 [data-theme="light"] .severity-info       { background: #e2e8f0; color: #475569; }
 
-[data-theme="light"] .flag-brand          { background: #e0ecfb; color: #0072b5; }
+[data-theme="light"] .flag-brand          { background: #ccfbf1; color: #0f766e; }
 
 /* ============================================================
    Threat classification tags
@@ -1816,7 +1818,7 @@ main.container { animation: fadeUp .5s var(--transition-slow) both; }
     display: block;
     height: 100%;
     border-radius: 999px;
-    background: linear-gradient(90deg, var(--cs-cyan), var(--cs-blue));
+    background: linear-gradient(90deg, var(--brand-teal), var(--brand-violet));
 }
 .contrib-pts {
     font-variant-numeric: tabular-nums;
@@ -1829,8 +1831,8 @@ main.container { animation: fadeUp .5s var(--transition-slow) both; }
     color: var(--text-muted);
     margin-top: 0.15rem;
 }
-tr.feed-row .contrib-bar > span { background: linear-gradient(90deg, var(--cs-orange), var(--cs-red)); }
-tr.feed-row td:first-child summary { color: var(--cs-orange); }
+tr.feed-row .contrib-bar > span { background: linear-gradient(90deg, var(--brand-amber), var(--brand-rose)); }
+tr.feed-row td:first-child summary { color: var(--brand-amber); }
 
 /* ---- Bulk Scan: import-from-feed row ---- */
 .feed-import {

@@ -14,6 +14,8 @@
 
 SOC Box is a containerized toolbox for SOC analysts - a homepage hub of self-hosted apps for the pivots analysts make all day. Its flagship URL scanner detonates suspect links across 8 security dimensions simultaneously - lexical analysis, SSL certificates, WHOIS records, HTTP headers, page content, link discovery, file downloads, and threat intelligence feeds - and produces a weighted risk score with an interactive results dashboard streamed in real time. Alongside it: multi-source IP enrichment and a KQL hunting-query generator.
 
+SOC Box is an independent open-source project. Its product identity, source code, and documentation are maintained separately from any employer tooling or branding.
+
 ## Features
 
 - **URL Scanner** (`/`) - the flagship tool: detonates a suspect link across **8 security analyzers** running concurrently on the URL, network, and content layers, streams results in real time over SSE, and renders a **3-tier verdict** (Safe / Uncertain / Malicious) with weighted confidence percentages

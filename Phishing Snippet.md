@@ -1,6 +1,6 @@
 #### Medium Priority
-*** 
-#### Observations 
+***
+#### Observations
 {{ alert.trigger.product_detail.name_label }} has alerted on a malicious URL click involving the user {{ Name }} with the following details:
 * UPN: {{ Recipient }}
   * [Sign-in logs]
@@ -40,4 +40,4 @@ Phishing involves malicious actors sending deceptive emails containing suspiciou
   * Monitor the user’s account for anomalous follow-on activity.
 * If this activity is expected, orchestration can be implemented to suppress future alerts for this behavior, or this alert may be closed with a comment.
 
-`If further action or clarification is needed, please escalate this back to Critical Start.`
+`If further action or clarification is needed, return this case to the security operations queue.`
